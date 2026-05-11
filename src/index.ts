@@ -6,9 +6,8 @@ import signinHandler from './routes/signin';
 import getProjectsHandler from './routes/projects';
 import getBookingsHandler from './routes/bookings';
 import { callbackSppGetHandler, callbackSppPostHandler } from './routes/callbackSpp';
-
-
 import instructionsHandler from './routes/instructions';
+import { initializeMcpTransport } from './mcp/transport';
 
 const app = express();
 const PORT = 3030;
@@ -39,7 +38,24 @@ app.get('/bookings', getBookingsHandler);
 // ---- /instructions endpoint ----
 app.get('/instructions', instructionsHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-  console.log('[SPP-AUTH] To begin authentication, visit: ' + process.env.APP_BASE_URL + ':' + PORT + '/signin');
-});
+// ---- Startup: init MCP then start listening ----
+async function startServer() {
+  try {
+    const mcpRouter = await initializeMcpTransport();
+    // Mount at both /mcp and /mcp/ to handle clients with or without trailing slash
+    app.use('/mcp', mcpRouter);
+    app.use('/mcp/', mcpRouter);
+    console.log('[MCP] Server mounted at /mcp');
+
+    app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+      console.log(`[SPP-AUTH] Sign-in: ${process.env.APP_BASE_URL}:${PORT}/signin`);
+      console.log(`[MCP] Endpoint: ${process.env.APP_BASE_URL}:${PORT}/mcp`);
+    });
+  } catch (err) {
+    console.error('[ERROR] Failed to start server:', err);
+    process.exit(1);
+  }
+}
+
+startServer();

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev src/index.ts",
-    "build": "tsc",
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js",
     "start": "node dist/index.js"
   },
   "keywords": [],
@@ -13,14 +13,20 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/express": "^2.0.0-alpha.2",
+    "@modelcontextprotocol/node": "^2.0.0-alpha.2",
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
     "axios": "^1.16.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "fast-xml-parser": "^5.7.3"
+    "fast-xml-parser": "^5.7.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.6.2",
+    "esbuild": "^0.28.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.3"
   }
