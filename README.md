@@ -1,26 +1,41 @@
-# Suite Projects Pro MCP Server
+# SuiteProjects Pro (SPP) API Client Usage
 
-A basic Node.js & TypeScript Express server for handling Suite Projects Pro callbacks and health checks.
+## SPPClient Service
 
-## Features
-- **GET /health**: Health check endpoint (returns `{ status: "ok" }`)
-- **POST /callback/spp**: Receives and logs JSON payloads from SPP sandbox
+All SPP API access should go through the `SPPClient` service:
 
-## Getting Started
+```ts
+import SPPClient from "./src/clients/SPPClient";
 
-1. Install dependencies:
-   ```sh
-   npm install
-   ```
-2. Start in development mode:
-   ```sh
-   npm run dev
-   ```
-3. Build and run production:
-   ```sh
-   npm run build
-   npm start
-   ```
+const client = new SPPClient({
+  sppUrl: process.env.SPP_URL,
+  clientId: process.env.SPP_CLIENT_ID,
+  clientSecret: process.env.SPP_CLIENT_SECRET,
+  callbackUrl: process.env.SPP_CALLBACK_URL,
+  accessToken: "<ACCESS_TOKEN>",
+  refreshToken: "<REFRESH_TOKEN>",
+  onRefresh: async ({ access_token, refresh_token }) => {
+    // persist new tokens
+  },
+});
+```
 
-- Server listens on port `3030`.
-- Edit API routes in `src/index.ts`
+### Required .env variables
+```
+SPP_URL=https://redspace-sbx.app.sandbox.netsuitesuiteprojectspro.com
+SPP_CLIENT_ID=
+SPP_CLIENT_SECRET=
+SPP_CALLBACK_URL=https://drearily-anime-wrench.ngrok-free.dev/callback/spp
+```
+
+### Features
+- Automatic access/refresh token management
+- Token refresh on expiry
+- All XML/BO API endpoints available
+- Full async/await
+
+See `src/clients/SPPClient.ts` for all advanced usage and config options.
+
+---
+
+**Note:** Supporting modules (errors, utils, BOService, etc) MUST exist for SPPClient.
