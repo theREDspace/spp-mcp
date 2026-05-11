@@ -1,28 +1,28 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'node:crypto';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import { mcpTools } from './tools';
 
-// Session store: maps session ID → transport
-const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
-
-async function getOrCreateTransport(sessionId: string | undefined): Promise<{
-  transport: NodeStreamableHTTPServerTransport;
-  sessionId: string;
-  isNew: boolean;
-}> {
-  if (sessionId && sessions.has(sessionId)) {
-    return { transport: sessions.get(sessionId)!, sessionId, isNew: false };
-  }
-
-  const newId = randomUUID();
+/**
+ * Creates a fresh, fully-registered McpServer + stateless transport per request.
+ *
+ * WHY STATELESS:
+ * The stateful transport (sessionIdGenerator: () => uuid) requires every
+ * non-initialize request to carry an `mcp-session-id` header. Clients that
+ * don't echo that header (or proxies like ngrok that strip it) will get
+ * "Bad Request: Server not initialized" on every tool call.
+ *
+ * In stateless mode (sessionIdGenerator: undefined) the SDK's validateSession()
+ * returns immediately with no checks, so tool calls work without a prior
+ * initialize handshake — each POST is a self-contained exchange.
+ */
+async function handleWithFreshServer(req: Request, res: Response, body?: unknown) {
   const transport = new NodeStreamableHTTPServerTransport({
-    sessionIdGenerator: () => newId,
+    sessionIdGenerator: undefined, // stateless — no session tracking
   });
 
-  // Create and connect a fresh McpServer for this session
   const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
+
   for (const tool of mcpTools) {
     server.registerTool(
       tool.name,
@@ -30,56 +30,36 @@ async function getOrCreateTransport(sessionId: string | undefined): Promise<{
       tool.handler
     );
   }
+
   await server.connect(transport);
-
-  sessions.set(newId, transport);
-
-  // Cleanup session when transport closes
-  transport.onclose = () => {
-    sessions.delete(newId);
-    console.log(`[MCP] Session closed: ${newId}`);
-  };
-
-  console.log(`[MCP] New session: ${newId}`);
-  return { transport, sessionId: newId, isNew: true };
+  await transport.handleRequest(req, res, body);
 }
 
 export async function initializeMcpTransport() {
   const router = Router();
 
-  // POST /mcp — client sends requests here
+  // POST /mcp — client sends JSON-RPC requests (initialize, tool calls, etc.)
   router.post('/', async (req: Request, res: Response) => {
     try {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      const { transport } = await getOrCreateTransport(sessionId);
-      await transport.handleRequest(req, res, req.body);
+      await handleWithFreshServer(req, res, req.body);
     } catch (err) {
       console.error('[MCP] POST error:', err);
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
 
-  // GET /mcp — client opens SSE stream here
+  // GET /mcp — client opens SSE stream (server-initiated notifications)
   router.get('/', async (req: Request, res: Response) => {
     try {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      const { transport } = await getOrCreateTransport(sessionId);
-      await transport.handleRequest(req, res);
+      await handleWithFreshServer(req, res);
     } catch (err) {
       console.error('[MCP] GET error:', err);
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
 
-  // DELETE /mcp — client signals end of session
-  router.delete('/', async (req: Request, res: Response) => {
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    if (sessionId && sessions.has(sessionId)) {
-      const transport = sessions.get(sessionId)!;
-      await transport.close();
-      sessions.delete(sessionId);
-      console.log(`[MCP] Session deleted: ${sessionId}`);
-    }
+  // DELETE /mcp — client signals end of session (no-op in stateless mode)
+  router.delete('/', (_req: Request, res: Response) => {
     res.status(200).end();
   });
 

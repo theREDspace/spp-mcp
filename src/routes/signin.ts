@@ -10,10 +10,13 @@ export default function signinHandler(req: Request, res: Response) {
     res.redirect(authUrl);
   } else {
     console.log(`[SPP-AUTH] Login URL generated: ${authUrl}`);
-    res.json({ 
-      success: true, 
-      auth_url: authUrl, 
-      note: "Ask the user to click this URL in their browser to sign in. The access token is valid for 1 hour. You must authenticate before using data endpoints. See /instructions for usage guidance."
-    });
+    const appBaseUrl = process.env.APP_BASE_URL || "";
+res.json({
+  success: true,
+  auth_url: authUrl,
+  absolute_auth_url: authUrl,
+  signin_route: `${appBaseUrl}/signin`,
+  note: "Click the URL above to authenticate via Redspace SPP. Once complete, retry your previous request."
+});
   }
 }

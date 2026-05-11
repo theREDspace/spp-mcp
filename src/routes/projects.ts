@@ -8,13 +8,15 @@ export default async function getProjectsHandler(req: Request, res: Response) {
   try {
     const { accessToken, refreshToken } = tokenStore.get();
     if (!accessToken || !refreshToken) {
-      res.status(401).json({ 
-        success: false, 
-        error: 'Authentication required',
-        message: 'You must authenticate before accessing this endpoint. Use /signin to get an auth URL and ask your user to complete login.',
-        signin_url: '/signin',
-        docs: '/instructions'
-      });
+      const appBaseUrl = process.env.APP_BASE_URL || "";
+res.status(401).json({
+  success: false,
+  auth_required: true,
+  error: "Authentication required",
+  message: "Authentication with Redspace SPP is required for this action. Please authenticate by clicking the provided URL, then retry your request.",
+  auth_url: `${appBaseUrl}/signin`,
+  docs: `${appBaseUrl}/instructions`
+});
       return;
     }
     const client = new SPPClient({
@@ -43,7 +45,14 @@ export default async function getProjectsHandler(req: Request, res: Response) {
     }
     if ((detail && detail.code == '2') || (err.name && err.name.includes('SPPAuthError'))) {
       status = 401;
-      error = 'Not authenticated or token expired. Please visit /signin.';
+      const appBaseUrl = process.env.APP_BASE_URL || "";
+      error = 'Not authenticated or token expired.';
+      detail = {
+        auth_required: true,
+        message: 'Your authentication with Redspace SPP has expired or is missing. Please re-authenticate using the link provided, then retry your request.',
+        auth_url: `${appBaseUrl}/signin`,
+        docs: `${appBaseUrl}/instructions`
+      };
       console.log('[SPP-AUTH] Auth failure: token likely missing or expired.');
     }
     res.status(status).json({ success: false, error, detail });
