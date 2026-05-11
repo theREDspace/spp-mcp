@@ -8,6 +8,8 @@ import getBookingsHandler from './routes/bookings';
 import { callbackSppGetHandler, callbackSppPostHandler } from './routes/callbackSpp';
 
 
+import instructionsHandler from './routes/instructions';
+
 const app = express();
 const PORT = 3030;
 
@@ -33,6 +35,9 @@ app.get('/projects', getProjectsHandler);
 
 // ---- /bookings endpoint ----
 app.get('/bookings', getBookingsHandler);
+
+// ---- /instructions endpoint ----
+app.get('/instructions', instructionsHandler);
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);

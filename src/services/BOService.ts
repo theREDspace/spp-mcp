@@ -3,7 +3,7 @@ import { XmlBuilder } from "../utils/XmlBuilder";
 import type { BORecordMap, Wrapper, WrapperWithStatus } from "./BORecordMap";
 import { SPPStatus } from "../utils/errorCodes";
 import { SPPResponseError } from "../clients/errors";
-import { Logger } from "../utils/Logger.js";
+import { Logger } from "../utils/Logger";
 
 export interface UpdateResult {
   id: string | null; // The ID of the record attempted to delete

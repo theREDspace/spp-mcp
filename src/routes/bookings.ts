@@ -9,7 +9,13 @@ export default async function getBookingsHandler(req: Request, res: Response) {
   try {
     const { accessToken, refreshToken } = tokenStore.get();
     if (!accessToken || !refreshToken) {
-      res.status(401).json({ success: false, error: 'Not authenticated. Please visit /signin.' });
+      res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required',
+        message: 'You must authenticate before accessing this endpoint. Use /signin to get an auth URL and ask your user to complete login.',
+        signin_url: '/signin',
+        docs: '/instructions'
+      });
       return;
     }
     const client = new SPPClient({
