@@ -1,5 +1,21 @@
 // src/utils/XmlBuilder.ts
 export class XmlBuilder {
+  /**
+   * Maps TypeScript-friendly BOName keys to their actual SPP XML API type names.
+   * SPP XML type names follow the pattern used in the API schema (often lowercase compound words).
+   * Add entries here whenever a BOName key does not match the SPP XML type name 1:1.
+   */
+  private static readonly SPP_TYPE_NAME_MAP: Record<string, string> = {
+    ProjectAssign: "Projectassign",
+    ProjectAssignmentProfile: "ProjectAssignmentProfile",
+    ProjectTaskAssign: "ProjectTaskAssign",
+  };
+
+  /** Resolves the correct SPP XML API type name for a given BOName. */
+  static resolveSPPTypeName(bo: string): string {
+    return XmlBuilder.SPP_TYPE_NAME_MAP[bo] ?? bo;
+  }
+
   // ─── READ ───────────────────────────────────────────────────────────
   static buildGet(
     type: string,
@@ -8,11 +24,13 @@ export class XmlBuilder {
     offset = -1,
     method?: "equal to" | "not equal to" | "all" | "newer-than" | "older-than"
   ): string {
+    // Resolve to the actual SPP XML API type name (may differ from the TypeScript BOName key)
+    const sppType = XmlBuilder.resolveSPPTypeName(type);
     const nullFilter = Object.values(filter).some((v) => v === null);
     let filterXML = "";
 
     if (Object.keys(filter).length) {
-      filterXML = `<${type}>
+      filterXML = `<${sppType}>
   ${Object.entries(filter)
     .map(([k, v]) => {
       // if someone passed in a full <Date>…</Date> fragment as a string
@@ -23,7 +41,7 @@ export class XmlBuilder {
       return v !== null ? `<${k}>${v}</${k}>` : `<${k}/>`;
     })
     .join("\n  ")}
-</${type}>`;
+</${sppType}>`;
     }
 
     const actualMethod =
@@ -35,7 +53,7 @@ export class XmlBuilder {
         ? ' field="date"'
         : "";
 
-    return `<Read type="${type}" enable_custom="1" method="${actualMethod}" limit="${
+    return `<Read type="${sppType}" enable_custom="1" method="${actualMethod}" limit="${
       offset > 0 ? `${offset},${limit}` : limit
     }"${nullFilter ? ' empty_is_nil="false"' : ""}${fieldAttr}>
   ${filterXML}
