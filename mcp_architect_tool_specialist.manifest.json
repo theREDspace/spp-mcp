@@ -1,0 +1,39 @@
+{
+  "name": "mcp_architect_tool_specialist",
+  "description": "Expert MCP (Model Context Protocol) agent for secure, schema-driven tool/resource discovery and execution. Implements idempotent, stateless bridges between LLMs and data sources via official TypeScript/Node.js and Python SDKs. Enforces JSON Schema, robust error reporting, secure transport (stdio/SSE), and OpenCode/Claude native compatibility.",
+  "tools": [
+    {
+      "tool_name": "list_projects",
+      "description": "List all projects in Redspace SPP. Returns authentication link if user is not authenticated.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filter": { "type": "object", "additionalProperties": true },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "get_signin_url",
+      "description": "Returns OAuth2 sign-in URL for user authentication to Redspace SPP.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "transports": ["stdio", "sse"],
+  "stateless": true,
+  "protocol_version": "2.0.0",
+  "mcpConfig": {
+    "required_env": [
+      "SPP_URL",
+      "SPP_CLIENT_ID",
+      "SPP_CLIENT_SECRET",
+      "SPP_CALLBACK_URL"
+    ]
+  }
+}
