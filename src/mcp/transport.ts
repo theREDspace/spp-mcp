@@ -17,9 +17,7 @@ import { mcpTools } from './tools';
  * initialize handshake — each POST is a self-contained exchange.
  */
 async function handleWithFreshServer(req: Request, res: Response, body?: unknown) {
-  const transport = new NodeStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless — no session tracking
-  });
+  const transport = new NodeStreamableHTTPServerTransport({});
 
   const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
 
