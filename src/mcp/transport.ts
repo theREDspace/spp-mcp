@@ -21,11 +21,17 @@ async function handleWithFreshServer(req: Request, res: Response, body?: unknown
 
   const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
 
+  const email = (req as any).email || req.header('email') || 'UNKNOWN_EMAIL';
   for (const tool of mcpTools) {
     server.registerTool(
       tool.name,
       { title: tool.name, description: tool.description, inputSchema: tool.inputSchema },
-      tool.handler
+      // Wrap handler to inject email and log usage
+      (input, context) => {
+        console.log(`[MCP][Tool=${tool.name}] Invoked by email=${email}`);
+        const ctxWithEmail = { ...context, email };
+        return tool.handler(input, ctxWithEmail);
+      }
     );
   }
 

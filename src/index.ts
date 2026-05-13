@@ -14,6 +14,23 @@ const PORT = 3030;
 
 app.use(express.json());
 
+// --- Require and validate 'email' header on MCP routes only ---
+// /signin and /callback/spp are exempt: they are part of the OAuth flow itself
+const EMAIL_EXEMPT_PATHS = ['/signin', '/callback/spp', '/health'];
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (EMAIL_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + '?'))) {
+    return next();
+  }
+  const email = req.header('email');
+  if (!email || !email.trim()) {
+    console.log(`[AUTH] Rejecting request: missing or blank email header from ${req.ip} path=${req.path}`);
+    return res.status(401).json({ error: 'Unauthorized: email header required' });
+  }
+  // Stash email for downstream use
+  (req as any).email = email.trim();
+  next();
+});
+
 // ----- SIGNIN ROUTE (SPP OAUTH) -----
 app.get('/signin', signinHandler);
 

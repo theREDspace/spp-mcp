@@ -11,9 +11,12 @@ const listBookings: Tool = {
     limit: z.number().optional(),
     offset: z.number().optional(),
   }),
-  async handler(args) {
+  async handler(args, _ctx) {
     const { filter = {}, limit = 100, offset = 0 } = args;
-    const client = getAuthenticatedClient();
+    if (!_ctx?.email) {
+      return textResponse('Missing required email for per-user SPP authentication.');
+    }
+    const client = getAuthenticatedClient(_ctx?.email);
     if (!client) return authRequiredResponse();
     try {
       const bookings = (await client.list('Booking', filter, limit, offset) as any[]) || [];

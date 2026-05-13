@@ -14,14 +14,19 @@ const getPersonInfo: Tool = {
   }),
 
   async handler(args, _ctx) {
-    const { person_name, user_id } = args as { person_name?: string; user_id?: string };
+     const { person_name, user_id } = args as { person_name?: string; user_id?: string };
 
-    if (!person_name && !user_id) {
-      return textResponse('Please provide either a person_name or user_id.');
-    }
+     if (!_ctx?.email) {
+       return textResponse('Missing required email for per-user SPP authentication.');
+     }
 
-    const client = getAuthenticatedClient();
-    if (!client) return authRequiredResponse();
+     if (!person_name && !user_id) {
+       return textResponse('Please provide either a person_name or user_id.');
+     }
+
+     const client = getAuthenticatedClient(_ctx?.email);
+     if (!client) return authRequiredResponse();
+
 
     // Resolve user — handles disambiguation and not-found messaging
     // Build args object without undefined keys to satisfy exactOptionalPropertyTypes

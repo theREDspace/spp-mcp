@@ -14,27 +14,47 @@ const getUserWorkLastWeek: Tool = {
     week_offset: z.number().optional(),
     day: z.string().optional(),
   }),
-  async handler(args, ctx) {
+  async handler(args, _ctx) {
     const { person_name, user_id, week_offset = 1, day } = args;
-    const client = getAuthenticatedClient();
-    if (!client) return authRequiredResponse();
-    const resolvedUser = await resolveUserByNameOrId(client, { user_id, person_name });
-    if (!resolvedUser.ok) return textResponse(resolvedUser.message);
-    const finalUserId = resolvedUser.entity.id;
-    const userName = resolvedUser.entity.name;
-    let startDate: Date, endDate: Date;
-    if (day) {
-      const parsed = parseMMDDYYYY(day);
-      if (!parsed) return textResponse('Invalid day format. Please use MM/DD/YYYY (e.g., 01/15/2026).');
-      startDate = parsed;
-      endDate = new Date(parsed);
-      endDate.setHours(23, 59, 59, 999);
-    } else {
-      const now = new Date();
-      const monday = getWeekMonday(now, week_offset);
-      startDate = monday;
-      endDate = getWeekSunday(monday);
+
+    if (!_ctx?.email) {
+      return textResponse('Missing required email for per-user SPP authentication.');
     }
+
+    if (!person_name && !user_id) {
+      return textResponse('Please provide either a person_name or user_id.');
+    }
+
+    const client = getAuthenticatedClient(_ctx.email);
+    if (!client) return authRequiredResponse();
+
+    let finalUserId: string;
+    let userName: string;
+    let startDate: Date;
+    let endDate: Date;
+
+    try {
+      const resolvedUser = await resolveUserByNameOrId(client, { user_id, person_name });
+      if (!resolvedUser.ok) return textResponse(resolvedUser.message);
+      finalUserId = resolvedUser.entity.id;
+      const entity = resolvedUser.entity as any;
+      const addr = entity?.addr ?? {};
+      userName = [addr.first, addr.last].filter(Boolean).join(' ') || entity?.nickname || finalUserId;
+
+      if (day) {
+        const parsed = parseMMDDYYYY(day);
+        if (!parsed) return textResponse(`Invalid day format: ${day}. Use MM/DD/YYYY.`);
+        startDate = parsed;
+        endDate = parsed;
+      } else {
+        const monday = getWeekMonday(week_offset);
+        startDate = monday;
+        endDate = getWeekSunday(monday);
+      }
+    } catch (err) {
+      return errorResponse(err, 'resolving user');
+    }
+
     try {
       const slips = (await client.list('Slip', { userid: finalUserId, type: 'T' }, 1000, 0) as any[]) || [];
       const filteredSlips = slips.filter((slip: any) => {

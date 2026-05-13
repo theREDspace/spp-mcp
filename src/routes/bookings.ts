@@ -1,23 +1,23 @@
 import { Request, Response } from 'express';
 import SPPClient from '../clients/SPPClient';
 import { Booking } from '../types/Booking';
-
-import tokenStore from './tokenStore'; // Singleton, always valid instance
+import emailTokenStore from '../services/EmailTokenStore';
 
 // GET /bookings handler
 export default async function getBookingsHandler(req: Request, res: Response) {
+  const email = (req as any).email as string | undefined;
+  const tokenData = email ? emailTokenStore.get(email) : undefined;
   try {
-    const { accessToken, refreshToken } = tokenStore.get();
-    if (!accessToken || !refreshToken) {
+    if (!tokenData?.accessToken || !tokenData?.refreshToken) {
       const appBaseUrl = process.env.APP_BASE_URL || "";
-res.status(401).json({
-  success: false,
-  auth_required: true,
-  error: "Authentication required",
-  message: "Authentication with Redspace SPP is required for this action. Please authenticate by clicking the provided URL, then retry your request.",
-  auth_url: `${appBaseUrl}/signin`,
-  docs: `${appBaseUrl}/instructions`
-});
+      res.status(401).json({
+        success: false,
+        auth_required: true,
+        error: "Authentication required",
+        message: "Authentication with Redspace SPP is required for this action. Please authenticate by clicking the provided URL, then retry your request.",
+        auth_url: `${appBaseUrl}/signin`,
+        docs: `${appBaseUrl}/instructions`
+      });
       return;
     }
     const client = new SPPClient({
@@ -25,11 +25,14 @@ res.status(401).json({
       clientId: process.env.SPP_CLIENT_ID as string,
       clientSecret: process.env.SPP_CLIENT_SECRET as string,
       callbackUrl: process.env.SPP_CALLBACK_URL as string,
-      accessToken,
-      refreshToken,
+      accessToken: tokenData.accessToken,
+      refreshToken: tokenData.refreshToken,
       logging: true,
       onRefresh: async ({ access_token, refresh_token }) => {
-        tokenStore.set(access_token, refresh_token);
+        if (email) {
+          const current = emailTokenStore.get(email) ?? tokenData;
+          emailTokenStore.set(email, { ...current, accessToken: access_token, refreshToken: refresh_token });
+        }
         console.log('[SPP-AUTH] Token auto-refreshed and stored');
       },
     });

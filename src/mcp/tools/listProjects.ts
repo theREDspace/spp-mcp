@@ -11,9 +11,12 @@ const listProjects: Tool = {
     limit: z.number().optional(),
     offset: z.number().optional(),
   }),
-  async handler(args) {
+  async handler(args, _ctx) {
     const { filter = {}, limit = 100, offset = 0 } = args;
-    const client = getAuthenticatedClient();
+    if (!_ctx?.email) {
+      return textResponse('Missing required email for per-user SPP authentication.');
+    }
+    const client = getAuthenticatedClient(_ctx?.email);
     if (!client) return authRequiredResponse();
     try {
       const projects = (await client.list('Project', filter, limit, offset) as any[]) || [];

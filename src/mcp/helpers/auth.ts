@@ -1,14 +1,18 @@
 import SPPClient from '../../clients/SPPClient';
-import tokenStore from '../../routes/tokenStore';
+import emailTokenStore, { SppTokenData } from '../../services/EmailTokenStore';
 import type { ToolResponse } from '../tools/types';
+
+// NOTE: All functions expect "email" to be explicitly provided and enforced upstream (middleware/context)!
 
 export function getAuthUrl() {
   return new SPPClient({}).getAuthUrl();
 }
 
-export function getAuthenticatedClient(): SPPClient | null {
-  const { accessToken, refreshToken } = tokenStore.get();
-  if (!accessToken || !refreshToken) {
+// Now expects email to be passed in context!!
+export function getAuthenticatedClient(email: string | undefined | null): SPPClient | null {
+  if (!email) return null;
+  const tokenData = emailTokenStore.get(email);
+  if (!tokenData || !tokenData.accessToken || !tokenData.refreshToken) {
     return null;
   }
   return new SPPClient({
@@ -16,10 +20,16 @@ export function getAuthenticatedClient(): SPPClient | null {
     clientId: process.env.SPP_CLIENT_ID as string,
     clientSecret: process.env.SPP_CLIENT_SECRET as string,
     callbackUrl: process.env.SPP_CALLBACK_URL as string,
-    accessToken,
-    refreshToken,
+    accessToken: tokenData.accessToken,
+    refreshToken: tokenData.refreshToken,
     onRefresh: async ({ access_token, refresh_token }: { access_token: string; refresh_token: string }) => {
-      tokenStore.set(access_token, refresh_token);
+      // Re-read current token data from store to avoid spreading stale snapshot
+      const current = emailTokenStore.get(email) ?? tokenData;
+      emailTokenStore.set(email, {
+        ...current,
+        accessToken: access_token,
+        refreshToken: refresh_token,
+      });
     },
   });
 }

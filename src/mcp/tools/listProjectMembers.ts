@@ -15,9 +15,12 @@ const listProjectMembers: Tool = {
     offset: z.number().optional(),
     include_inactive: z.boolean().optional(),
   }),
-  async handler(args) {
+  async handler(args, _ctx) {
     const { project_id, project_name, limit = 1000, offset = 0, include_inactive = false } = args;
-    const client = getAuthenticatedClient();
+    if (!_ctx?.email) {
+      return textResponse('Missing required email for per-user SPP authentication.');
+    }
+    const client = getAuthenticatedClient(_ctx?.email);
     if (!client) return authRequiredResponse();
     const res = await resolveProjectByNameOrId(client, { project_id, project_name });
     if (!res.ok) return textResponse(res.message);
