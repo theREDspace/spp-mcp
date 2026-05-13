@@ -51,7 +51,7 @@ export async function resolveProjectByNameOrId(
         message: `Multiple projects found for input "${project_name}" using filter ${filterUsed}. Please use project_id instead.`
       };
     }
-    return { ok: true, entity: { id: projectResults[0].id, name: projectResults[0].name || projectResults[0].id }, raw: projectResults[0] };
+    return { ok: true, entity: { id: projectResults[0]?.id || '', name: projectResults[0]?.name || projectResults[0]?.id || '' }, raw: projectResults[0] };
   }
   return {
     ok: false,
@@ -81,17 +81,17 @@ export async function resolveUserByNameOrId(
       userResults = (await client.list('User', { email: person_name }, 1000, 0) as any[]) || [];
     }
     if (!userResults.length) {
-      const parts = person_name.trim().split(/\s+/);
-      if (parts.length > 1) {
-        const allUsers = (await client.list('User', {}, 1000, 0) as any[]) || [];
-        userResults = allUsers.filter((u: any) => {
-          const first = u.addr?.first?.toLowerCase() || '';
-          const last = u.addr?.last?.toLowerCase() || '';
-          const p1 = parts[0].toLowerCase();
-          const p2 = parts.slice(1).join(' ').toLowerCase();
-          return first === p1 && last === p2;
-        });
-      }
+       const parts = person_name.trim().split(/\s+/);
+       if (parts.length > 1 && parts[0] && parts[1]) {
+         const allUsers = (await client.list('User', {}, 1000, 0) as any[]) || [];
+         userResults = allUsers.filter((u: any) => {
+           const first = u.addr?.first?.toLowerCase() || '';
+           const last = u.addr?.last?.toLowerCase() || '';
+           const p1 = parts[0]?.toLowerCase() || '';
+           const p2 = parts.slice(1).join(' ').toLowerCase();
+           return first === p1 && last === p2;
+         });
+       }
     }
     if (!userResults.length) {
       // Fallback: full name match

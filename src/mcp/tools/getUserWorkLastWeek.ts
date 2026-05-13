@@ -14,7 +14,7 @@ const getUserWorkLastWeek: Tool = {
     week_offset: z.number().optional(),
     day: z.string().optional(),
   }),
-  async handler(args) {
+  async handler(args, ctx) {
     const { person_name, user_id, week_offset = 1, day } = args;
     const client = getAuthenticatedClient();
     if (!client) return authRequiredResponse();
@@ -62,16 +62,22 @@ const getUserWorkLastWeek: Tool = {
          const minuteValue = typeof slip.minute === 'number' ? slip.minute : 0;
          const hours = slip.decimal_hours ?? ((slip.hour ?? 0) + (minuteValue / 60));
          projectMap[projId].hours += hours;
-         if (slip.projecttaskid) {
-           if (!projectMap[projId].tasks[slip.projecttaskid]) projectMap[projId].tasks[slip.projecttaskid] = { hours: 0, slips: [] };
-           projectMap[projId].tasks[slip.projecttaskid].hours += hours;
-           // Attach slip to this task (with note)
-           projectMap[projId].tasks[slip.projecttaskid].slips.push({
-             date: slip.date, // dateContainer
-             hours,
-             note: normalizeSlipNote(slip.notes)
-           });
-         }
+          if (slip.projecttaskid) {
+            const proj = projectMap[projId];
+            if (proj) {
+              if (!proj.tasks[slip.projecttaskid]) proj.tasks[slip.projecttaskid] = { hours: 0, slips: [] };
+              const task = proj.tasks[slip.projecttaskid];
+              if (task) {
+                task.hours += hours;
+                // Attach slip to this task (with note)
+                task.slips.push({
+                  date: slip.date, // dateContainer
+                  hours,
+                  note: normalizeSlipNote(slip.notes)
+                });
+              }
+            }
+          }
        });
        const projectIds = Object.keys(projectMap);
        const projectFilters = projectIds.map((id: string) => ({ id }));
@@ -94,38 +100,40 @@ const getUserWorkLastWeek: Tool = {
          `${userName} — work logged from ${formatMMDDYYYY(startDate)} to ${formatMMDDYYYY(endDate)}:`,
          ''
        ];
-       projectIds.forEach((projId: string) => {
-         const projData = projectMap[projId];
-         const proj = projectMap2[projId];
-         const projName = proj?.name || '(unknown project)';
-         const projCode = proj?.code ? `[${proj.code}]` : '';
-         lines.push(`- ${projCode} ${projName} — ${projData.hours.toFixed(1)}h`);
-         const taskIds = Object.keys(projData.tasks);
-         taskIds.forEach((taskId: string) => {
-           const taskData = projData.tasks[taskId];
-           const task = taskMap[taskId];
-           const taskName = task?.name || '(unknown task)';
-           lines.push(`  • ${taskName} — ${taskData.hours.toFixed(1)}h`);
-           // Now surface each slip line with notes (if present)
-           if (Array.isArray(taskData.slips)) {
-             taskData.slips.sort((a, b) => {
-               // Sort by date ascending (earliest first)
-               const d1 = dateContainerToDate(a.date)?.getTime() ?? 0;
-               const d2 = dateContainerToDate(b.date)?.getTime() ?? 0;
-               return d1 - d2;
-             });
-             taskData.slips.forEach(slipEntry => {
-               const slipDate: Date | null = dateContainerToDate(slipEntry.date);
-               const slipDateStr = slipDate ? formatMMDDYYYY(slipDate) : '??/??/????';
-               let slipLine = `    • ${slipDateStr} — ${slipEntry.hours.toFixed(2)}h`;
-               if (slipEntry.note) {
-                 slipLine += ` — note: ${slipEntry.note}`;
-               }
-               lines.push(slipLine);
-             });
-           }
-         });
-       });
+        projectIds.forEach((projId: string) => {
+          const projData = projectMap[projId];
+          if (!projData) return;
+          const proj = projectMap2[projId];
+          const projName = proj?.name || '(unknown project)';
+          const projCode = proj?.code ? `[${proj.code}]` : '';
+          lines.push(`- ${projCode} ${projName} — ${projData.hours.toFixed(1)}h`);
+          const taskIds = Object.keys(projData.tasks);
+          taskIds.forEach((taskId: string) => {
+            const taskData = projData.tasks[taskId];
+            if (!taskData) return;
+            const task = taskMap[taskId];
+            const taskName = task?.name || '(unknown task)';
+            lines.push(`  • ${taskName} — ${taskData.hours.toFixed(1)}h`);
+            // Now surface each slip line with notes (if present)
+            if (Array.isArray(taskData.slips)) {
+              taskData.slips.sort((a, b) => {
+                // Sort by date ascending (earliest first)
+                const d1 = dateContainerToDate(a.date)?.getTime() ?? 0;
+                const d2 = dateContainerToDate(b.date)?.getTime() ?? 0;
+                return d1 - d2;
+              });
+              taskData.slips.forEach(slipEntry => {
+                const slipDate: Date | null = dateContainerToDate(slipEntry.date);
+                const slipDateStr = slipDate ? formatMMDDYYYY(slipDate) : '??/??/????';
+                let slipLine = `    • ${slipDateStr} — ${slipEntry.hours.toFixed(2)}h`;
+                if (slipEntry.note) {
+                  slipLine += ` — note: ${slipEntry.note}`;
+                }
+                lines.push(slipLine);
+              });
+            }
+          });
+        });
        return textResponse(lines.join('\n'));
 
     } catch (err) {

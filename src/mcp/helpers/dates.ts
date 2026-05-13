@@ -30,7 +30,7 @@ export function getWeekSunday(monday: Date): Date {
 
 export function parseMMDDYYYY(dateStr: string): Date | null {
   const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
+  if (!match || !match[1] || !match[2] || !match[3]) return null;
   try {
     const month = parseInt(match[1], 10);
     const day = parseInt(match[2], 10);

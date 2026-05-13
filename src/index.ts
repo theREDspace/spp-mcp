@@ -1,4 +1,4 @@
-require('dotenv').config();
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import axios from "axios";
 import healthHandler from './routes/health';

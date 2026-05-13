@@ -7,7 +7,7 @@ const listBookings: Tool = {
   name: 'list_bookings',
   description: 'List all bookings in Redspace SPP. If the user is not authenticated, returns an authentication link. Optionally accepts filter, limit, and offset.',
   inputSchema: z.object({
-    filter: z.record(z.any()).optional(),
+    filter: z.record(z.string(), z.any()).optional(),
     limit: z.number().optional(),
     offset: z.number().optional(),
   }),

@@ -27,8 +27,8 @@ describe('getUserWorkLastWeek tool', () => {
     } as any);
     jest.spyOn(resolvers, 'resolveUserByNameOrId').mockResolvedValue({ ok: true, entity: { id: 'U1', name: 'Anna Example' } });
 
-    const res = await getUserWorkLastWeek.handler({ user_id: 'U1', week_offset: 1 });
-    const out = res.content[0].text;
+    const res = await getUserWorkLastWeek.handler({ user_id: 'U1', week_offset: 1 }, {});
+    const out = res.content[0]?.text;
     expect(out).toMatch(/Anna Example/);
     expect(out).toMatch(/\[XY\] Alpha/);
     expect(out).toMatch(/• Design — 5.0h/);
