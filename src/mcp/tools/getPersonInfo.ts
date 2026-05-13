@@ -8,17 +8,17 @@ const getPersonInfo: Tool = {
   name: 'get_person_info',
   description:
     'Get detailed information about a person from SPP. Accepts a person name or user ID and returns profile fields including contact info, role, department, timezone, and location.',
-  inputSchema: z
-    .object({
-      person_name: z.string().trim().min(1).optional().describe('Full name, nickname, or email of the person'),
-      user_id: z.string().trim().min(1).optional().describe('SPP user ID'),
-    })
-    .refine((data) => data.person_name || data.user_id, {
-      message: 'At least one of person_name or user_id must be provided.',
-    }),
+  inputSchema: z.object({
+    person_name: z.string().trim().min(1).optional().describe('Full name, nickname, or email of the person'),
+    user_id: z.string().trim().min(1).optional().describe('SPP user ID'),
+  }),
 
   async handler(args, _ctx) {
     const { person_name, user_id } = args as { person_name?: string; user_id?: string };
+
+    if (!person_name && !user_id) {
+      return textResponse('Please provide either a person_name or user_id.');
+    }
 
     const client = getAuthenticatedClient();
     if (!client) return authRequiredResponse();
