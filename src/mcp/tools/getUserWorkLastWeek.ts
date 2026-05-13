@@ -26,7 +26,7 @@ const getUserWorkLastWeek: Tool = {
     }
 
     const client = getAuthenticatedClient(_ctx.email);
-    if (!client) return authRequiredResponse();
+    if (!client) return authRequiredResponse(_ctx!.email);
 
     let finalUserId: string;
     let userName: string;
@@ -52,7 +52,7 @@ const getUserWorkLastWeek: Tool = {
         endDate = getWeekSunday(monday);
       }
     } catch (err) {
-      return errorResponse(err, 'resolving user');
+      return errorResponse(err, 'resolving user', '', _ctx!.email);
     }
 
     try {
@@ -157,7 +157,7 @@ const getUserWorkLastWeek: Tool = {
        return textResponse(lines.join('\n'));
 
     } catch (err) {
-      return errorResponse(err, 'fetching work');
+      return errorResponse(err, 'fetching work', '', _ctx!.email);
     }
   }
 };

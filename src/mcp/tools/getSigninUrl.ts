@@ -8,8 +8,11 @@ const getSigninUrl: Tool = {
   description:
     'Get the OAuth2 authentication URL for the user to sign in to Redspace SPP. Call this when the user needs to authenticate.',
   inputSchema: z.object({}),
-  async handler() {
-    const auth_url = getAuthUrl();
+  async handler(_args, _ctx) {
+    if (!_ctx?.email) {
+      return textResponse('Missing required email for per-user SPP authentication.');
+    }
+    const auth_url = getAuthUrl(_ctx.email);
     return textResponse(
       [
         'Please authenticate by clicking the link below, then **retry your original request**:',

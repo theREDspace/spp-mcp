@@ -12,10 +12,11 @@ export function textResponse(text: string): ToolResponse {
 export function errorResponse(
   err: any,
   label: string,
-  extra: string = ''
+  extra: string = '',
+  email?: string
 ): ToolResponse {
   if (isAuthError(err)) {
-    return authRequiredResponse();
+    return authRequiredResponse(email ?? '');
   }
   const errDetail = err?.detail ? ` [code: ${err.detail.code}, detail: ${err.detail.message}]` : '';
   return textResponse(

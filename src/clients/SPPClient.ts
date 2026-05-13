@@ -128,7 +128,7 @@ class SPPClient {
       });
     }
   }
-  getAuthUrl(): string {
+  getAuthUrl(state?: string): string {
     // guard against missing configuration
     const missing: string[] = [];
     if (!this.sppUrl) missing.push("sppUrl");
@@ -142,7 +142,8 @@ class SPPClient {
         )}`
       );
     }
-    return `${this.sppUrl}/login/oauth2/v1/authorize?response_type=code&redirect_uri=${this.callbackUrl}&scope=xml+rest&client_id=${this.clientId}`;
+    const base = `${this.sppUrl}/login/oauth2/v1/authorize?response_type=code&redirect_uri=${this.callbackUrl}&scope=xml+rest&client_id=${this.clientId}`;
+    return state ? `${base}&state=${encodeURIComponent(state)}` : base;
   }
   setAccessToken(token: string | undefined | null): void {
     this.accessToken = token;

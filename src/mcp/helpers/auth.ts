@@ -1,11 +1,15 @@
+import crypto from 'crypto';
 import SPPClient from '../../clients/SPPClient';
 import emailTokenStore, { SppTokenData } from '../../services/EmailTokenStore';
+import stateStore from '../../services/StateStore';
 import type { ToolResponse } from '../tools/types';
 
 // NOTE: All functions expect "email" to be explicitly provided and enforced upstream (middleware/context)!
 
-export function getAuthUrl() {
-  return new SPPClient({}).getAuthUrl();
+export function getAuthUrl(email: string): string {
+  const state = crypto.randomUUID();
+  stateStore.set(state, email);
+  return new SPPClient({}).getAuthUrl(state);
 }
 
 // Now expects email to be passed in context!!
@@ -34,8 +38,8 @@ export function getAuthenticatedClient(email: string | undefined | null): SPPCli
   });
 }
 
-export function authRequiredResponse(): ToolResponse {
-  const auth_url = getAuthUrl();
+export function authRequiredResponse(email: string): ToolResponse {
+  const auth_url = getAuthUrl(email);
   return {
     content: [
       {

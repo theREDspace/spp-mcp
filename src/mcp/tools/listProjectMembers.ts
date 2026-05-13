@@ -21,7 +21,7 @@ const listProjectMembers: Tool = {
       return textResponse('Missing required email for per-user SPP authentication.');
     }
     const client = getAuthenticatedClient(_ctx?.email);
-    if (!client) return authRequiredResponse();
+    if (!client) return authRequiredResponse(_ctx!.email);
     const res = await resolveProjectByNameOrId(client, { project_id, project_name });
     if (!res.ok) return textResponse(res.message);
     const finalProjectId = res.entity.id;
@@ -86,7 +86,7 @@ const listProjectMembers: Tool = {
     } catch (err) {
       let extra = '';
       if (project_name && !project_id) extra = '\n(Tried to resolve project_name via filters: name/code/externalid and in-memory match)';
-      return errorResponse(err, 'listing project members', extra);
+      return errorResponse(err, 'listing project members', extra, _ctx!.email);
     }
   }
 };

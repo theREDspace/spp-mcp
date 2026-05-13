@@ -25,7 +25,7 @@ const getPersonInfo: Tool = {
      }
 
      const client = getAuthenticatedClient(_ctx?.email);
-     if (!client) return authRequiredResponse();
+     if (!client) return authRequiredResponse(_ctx!.email);
 
 
     // Resolve user — handles disambiguation and not-found messaging
@@ -42,7 +42,7 @@ const getPersonInfo: Tool = {
       // Always fetch full user record to guarantee a complete, fresh response
       user = await client.read('User', userId);
     } catch (err) {
-      return errorResponse(err, 'fetching person info');
+      return errorResponse(err, 'fetching person info', '', _ctx!.email);
     }
 
     // Optionally resolve role name

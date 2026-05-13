@@ -17,7 +17,7 @@ const listProjects: Tool = {
       return textResponse('Missing required email for per-user SPP authentication.');
     }
     const client = getAuthenticatedClient(_ctx?.email);
-    if (!client) return authRequiredResponse();
+    if (!client) return authRequiredResponse(_ctx!.email);
     try {
       const projects = (await client.list('Project', filter, limit, offset) as any[]) || [];
       const lines = [
@@ -27,7 +27,7 @@ const listProjects: Tool = {
       ];
       return textResponse(lines.join('\n'));
     } catch (err) {
-      return errorResponse(err, 'listing projects');
+      return errorResponse(err, 'listing projects', '', _ctx!.email);
     }
   }
 };
