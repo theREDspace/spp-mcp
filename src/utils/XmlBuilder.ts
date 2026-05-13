@@ -2,7 +2,7 @@
 export class XmlBuilder {
   /**
    * Maps TypeScript-friendly BOName keys to their actual SPP XML API type names.
-   * SPP XML type names follow the pattern used in the API schema (often lowercase compound words).
+   * SPP XML type names follow the pattern used in the API schema.
    * Add entries here whenever a BOName key does not match the SPP XML type name 1:1.
    */
   private static readonly SPP_TYPE_NAME_MAP: Record<string, string> = {
@@ -11,9 +11,25 @@ export class XmlBuilder {
     ProjectTaskAssign: "ProjectTaskAssign",
   };
 
+  /**
+   * Maps business object names to their correct filter element names.
+   * Some business objects use a different element name in filter XML than in the Read type attribute.
+   * For example, ProjectAssign queries use type="Projectassign" but filter elements should be <ProjectAssign>.
+   */
+  private static readonly FILTER_ELEMENT_MAP: Record<string, string> = {
+    Projectassign: "ProjectAssign",
+    ProjectAssignmentProfile: "ProjectAssignmentProfile",
+    ProjectTaskAssign: "ProjectTaskAssign",
+  };
+
   /** Resolves the correct SPP XML API type name for a given BOName. */
   static resolveSPPTypeName(bo: string): string {
     return XmlBuilder.SPP_TYPE_NAME_MAP[bo] ?? bo;
+  }
+
+  /** Resolves the correct filter element name for a given SPP type name. */
+  static resolveFilterElementName(sppType: string): string {
+    return XmlBuilder.FILTER_ELEMENT_MAP[sppType] ?? sppType;
   }
 
   // ─── READ ───────────────────────────────────────────────────────────
@@ -26,11 +42,13 @@ export class XmlBuilder {
   ): string {
     // Resolve to the actual SPP XML API type name (may differ from the TypeScript BOName key)
     const sppType = XmlBuilder.resolveSPPTypeName(type);
+    // Resolve the filter element name (may differ from the SPP type name)
+    const filterElementName = XmlBuilder.resolveFilterElementName(sppType);
     const nullFilter = Object.values(filter).some((v) => v === null);
     let filterXML = "";
 
     if (Object.keys(filter).length) {
-      filterXML = `<${sppType}>
+      filterXML = `<${filterElementName}>
   ${Object.entries(filter)
     .map(([k, v]) => {
       // if someone passed in a full <Date>…</Date> fragment as a string
@@ -41,7 +59,7 @@ export class XmlBuilder {
       return v !== null ? `<${k}>${v}</${k}>` : `<${k}/>`;
     })
     .join("\n  ")}
-</${sppType}>`;
+</${filterElementName}>`;
     }
 
     const actualMethod =

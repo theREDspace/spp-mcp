@@ -3,60 +3,64 @@ import type SPPClient from '../../clients/SPPClient';
 
 type Project = { id: string; name?: string; code?: string; externalid?: string };
 
-type ResolveResult<T> = { ok: true; entity: T; raw?: any } | { ok: false; message: string };
+type ResolveResult<T> =
+  | { ok: true; entity: T; raw?: any }
+  | { ok: false; message: string }
+  | { ok: false; candidates: { id: string; name?: string; code?: string; externalid?: string }[]; message: string };
 
 export async function resolveProjectByNameOrId(
   client: SPPClient,
   { project_id, project_name }:
     { project_id?: string, project_name?: string }
 ): Promise<ResolveResult<{ id: string; name: string }>> {
-  if (project_id) {
-    try {
-      const project = await client.read('Project', project_id);
-      return { ok: true, entity: { id: project.id, name: project.name ?? '(unknown)' }, raw: project };
-    } catch (err) {
-      return { ok: false, message: `Could not find project with id="${project_id}".` };
-    }
-  }
-  if (project_name) {
-    // Try by name, code, externalid
-    const filtersToTry = [ { name: project_name }, { code: project_name }, { externalid: project_name } ];
-    let projectResults: Project[] = [];
-    let filterUsed: undefined|string = undefined;
-    let lastErr:any = null;
-    for (const filter of filtersToTry) {
+    if (project_id) {
       try {
-        projectResults = (await client.list('Project', filter, 10, 0) as any[]) || [];
-        filterUsed = Object.keys(filter)[0];
-        if (projectResults.length > 0) break;
-      } catch (err) { lastErr = err; }
+        const project = await client.read('Project', project_id);
+        return { ok: true, entity: { id: project.id, name: project.name ?? '(unknown)' }, raw: project };
+      } catch (err) {
+        return { ok: false, message: `Could not find project with id="${project_id}".` };
+      }
     }
-    if (!projectResults.length) {
-      // fallback: fetch all projects, try memory match
-      const allProjects = (await client.list('Project', {}, 1000, 0) as any[]) || [];
-      projectResults = allProjects.filter(
-        (p: Project) => typeof p.name === "string" && p.name.trim().toLowerCase() === project_name.trim().toLowerCase()
-      );
-      filterUsed = 'in-memory';
+    if (project_name) {
+      // Try by name, code, externalid
+      const filtersToTry = [ { name: project_name }, { code: project_name }, { externalid: project_name } ];
+      let projectResults: Project[] = [];
+      let filterUsed: undefined|string = undefined;
+      let lastErr:any = null;
+      for (const filter of filtersToTry) {
+        try {
+          projectResults = (await client.list('Project', filter, 10, 0) as any[]) || [];
+          filterUsed = Object.keys(filter)[0];
+          if (projectResults.length > 0) break;
+        } catch (err) { lastErr = err; }
+      }
+      if (!projectResults.length) {
+        // fallback: fetch all projects, try memory match
+        const allProjects = (await client.list('Project', {}, 1000, 0) as any[]) || [];
+        projectResults = allProjects.filter(
+          (p: Project) => typeof p.name === "string" && p.name.trim().toLowerCase() === project_name.trim().toLowerCase()
+        );
+        filterUsed = 'in-memory';
+      }
+      if (projectResults.length === 0) {
+        return {
+          ok: false,
+          message: `No project found with name/code/externalid matching "${project_name}". Tried filters: name, code, externalid, and in-memory fallback.`
+        };
+      }
+      if (projectResults.length > 1) {
+        return {
+          ok: false,
+          candidates: projectResults,
+          message: `Multiple projects found for input "${project_name}" using filter ${filterUsed}. Please specify which one.`,
+        };
+      }
+      return { ok: true, entity: { id: projectResults[0]?.id || '', name: projectResults[0]?.name || projectResults[0]?.id || '' }, raw: projectResults[0] };
     }
-    if (projectResults.length === 0) {
-      return {
-        ok: false,
-        message: `No project found with name/code/externalid matching "${project_name}". Tried filters: name, code, externalid, and in-memory fallback.`
-      };
-    }
-    if (projectResults.length > 1) {
-      return {
-        ok: false,
-        message: `Multiple projects found for input "${project_name}" using filter ${filterUsed}. Please use project_id instead.`
-      };
-    }
-    return { ok: true, entity: { id: projectResults[0]?.id || '', name: projectResults[0]?.name || projectResults[0]?.id || '' }, raw: projectResults[0] };
-  }
-  return {
-    ok: false,
-    message: `Please provide either project_id or project_name.`
-  };
+     return {
+       ok: false,
+       message: `Please provide either project_id or project_name.`
+     };
 }
 
 // User (by user_id/person_name)

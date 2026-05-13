@@ -22,10 +22,23 @@ const listProjectMembers: Tool = {
     }
     const client = getAuthenticatedClient(_ctx?.email);
     if (!client) return authRequiredResponse(_ctx!.email);
-    const res = await resolveProjectByNameOrId(client, { project_id, project_name });
-    if (!res.ok) return textResponse(res.message);
-    const finalProjectId = res.entity.id;
-    let projectName = res.entity.name;
+     const res = await resolveProjectByNameOrId(client, { project_id, project_name });
+     if (!res.ok) {
+       if ('candidates' in res) {
+         const lines = [
+           `Multiple projects found matching "${project_name}":`,
+           '',
+           ...res.candidates.map((p: any) => `- [${p.id}] ${p.name || '(no name)'}${p.code ? ` (Code: ${p.code})` : ''}${p.externalid ? ` (ExternalID: ${p.externalid})` : ''}`),
+           '',
+           'Please specify your project by ID to continue.',
+         ];
+         return textResponse(lines.join('\n'));
+       }
+       return textResponse(res.message);
+     }
+     // If exactly one project is found, continue as before
+     const finalProjectId = res.entity.id;
+     let projectName = res.entity.name;
     try {
       let projectDetails: any = null;
       try {
