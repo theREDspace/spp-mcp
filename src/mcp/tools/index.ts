@@ -4,6 +4,7 @@ import listProjects from './listProjects';
 import listBookings from './listBookings';
 import listProjectMembers from './listProjectMembers';
 import getUserWorkLastWeek from './getUserWorkLastWeek';
+import getPersonInfo from './getPersonInfo';
 import type { Tool } from './types';
 
 export const mcpTools: Tool[] = [
@@ -13,4 +14,5 @@ export const mcpTools: Tool[] = [
   listBookings,
   listProjectMembers,
   getUserWorkLastWeek,
+  getPersonInfo,
 ];
