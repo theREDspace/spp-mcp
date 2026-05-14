@@ -1,0 +1,111 @@
+{
+  "name": "REDspace SPP (SuiteProjects Pro) MCP Server",
+  "description": "MCP server exposing Redspace SuiteProjects Pro (SPP) APIs and project/resource tools for secure, schema-driven integration with LLMs, automations, and apps. Provides SPP authentication, project discovery, bookings, member/resource info, timesheets, and user info via robust API endpoints.",
+  "tools": [
+    {
+      "tool_name": "get_signin_url",
+      "description": "Get the OAuth2 authentication URL for the user to sign in to Redspace SPP. Call this when the user needs to authenticate.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "tool_name": "get_auth_instructions",
+      "description": "Get instructions for authenticating and using the Redspace SPP MCP tools.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "tool_name": "list_projects",
+      "description": "List all projects in Redspace SPP. If the user is not authenticated, returns an authentication link. Optionally accepts filter, limit, and offset.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filter": { "type": "object", "additionalProperties": true },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "list_bookings",
+      "description": "List all bookings in Redspace SPP. If the user is not authenticated, returns an authentication link. Optionally accepts filter, limit, and offset.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filter": { "type": "object", "additionalProperties": true },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "list_project_members",
+      "description": "List all users (resources) assigned to a given SPP project. Accepts either a project ID or project name. Returns member details including name, email, and allocation percentage.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "project_name": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" },
+          "include_inactive": { "type": "boolean" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "get_user_work_last_week",
+      "description": "Get projects and tasks a user worked on during a specific week or day. Requires at least person_name or user_id. Returns time entries grouped by project and task.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "person_name": { "type": "string" },
+          "user_id": { "type": "string" },
+          "week_offset": { "type": "integer" },
+          "day": { "type": "string", "description": "Date in MM/DD/YYYY format" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "get_person_info",
+      "description": "Get detailed information about a person from SPP. Accepts a person name or user ID and returns profile fields including contact info, role, department, timezone, and location.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "person_name": { "type": "string", "description": "Full name, nickname, or email of the person" },
+          "user_id": { "type": "string", "description": "SPP user ID" }
+        },
+        "required": []
+      }
+    },
+    {
+      "tool_name": "get_me",
+      "description": "Get your own user profile information from SPP. Uses the email from your request headers to fetch your authenticated user account details including contact info, role, department, timezone, and location.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "transports": ["stdio", "sse"],
+  "stateless": true,
+  "protocol_version": "2.0.0",
+  "mcpConfig": {
+    "required_env": [
+      "SPP_URL",
+      "SPP_CLIENT_ID",
+      "SPP_CLIENT_SECRET",
+      "SPP_CALLBACK_URL"
+    ]
+  }
+}
