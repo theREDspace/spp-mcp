@@ -87,6 +87,9 @@ const getMyLatestTimesheet: Tool = {
         }
       }
 
+      // Fetch slips for project/task breakdown
+      const slips = (await client.list('Slip', { timesheetid: latest.id, type: 'T' }, 1000, 0) as any[]) || [];
+
       // Build output
       const lines: string[] = [
         'Your Latest Timesheet',
@@ -96,8 +99,87 @@ const getMyLatestTimesheet: Tool = {
         `  Submitted : ${submittedStr}`,
         `  Approved  : ${approvedStr}`,
         `  Approver  : ${approverName}`,
-        `  ID        : ${latest.id} (for details)`,
+        `  ID        : ${latest.id}`,
       ];
+
+      // Add brief project/task preview if slips exist
+      if (slips.length > 0) {
+        lines.push('');
+        lines.push('Quick Breakdown:');
+
+        // Aggregate by project → task
+        const projectMap: Record<string, { hours: number; tasks: Record<string, { hours: number }> }> = {};
+        slips.forEach((slip: any) => {
+          const projId = slip.projectid || '(no-project)';
+          const minuteValue = typeof slip.minute === 'number' ? slip.minute : 0;
+          const hours = slip.decimal_hours ?? ((slip.hour ?? 0) + (minuteValue / 60));
+
+          // Ensure project entry exists
+          if (!projectMap[projId]) {
+            projectMap[projId] = { hours: 0, tasks: {} };
+          }
+          projectMap[projId]!.hours += hours;
+
+          // Ensure task entry exists if task is present
+          if (slip.projecttaskid) {
+            if (!projectMap[projId]!.tasks[slip.projecttaskid]) {
+              projectMap[projId]!.tasks[slip.projecttaskid] = { hours: 0 };
+            }
+            projectMap[projId]!.tasks[slip.projecttaskid]!.hours += hours;
+          }
+        });
+
+        // Batch-resolve project names
+        const projectIds = Object.keys(projectMap);
+        const projectFilters = projectIds.map((id: string) => ({ id }));
+        let projects: any[] = [];
+        try {
+          projects = (await client.batchList('Project', projectFilters, 1000, 0) as any[]) || [];
+        } catch {
+          projects = [];
+        }
+        const projectMap2: Record<string, any> = {};
+        projects.forEach((p: any) => {
+          if (p?.id) projectMap2[p.id] = p;
+        });
+
+        // Batch-resolve task names
+        const taskIds = Object.values(projectMap).flatMap((p: any) => Object.keys(p.tasks));
+        const uniqueTaskIds = [...new Set(taskIds)];
+        const taskFilters = uniqueTaskIds.map((id: string) => ({ id }));
+        let projectTasks: any[] = [];
+        try {
+          projectTasks = (await client.batchList('ProjectTask', taskFilters, 1000, 0) as any[]) || [];
+        } catch {
+          projectTasks = [];
+        }
+        const taskMap: Record<string, any> = {};
+        projectTasks.forEach((t: any) => {
+          if (t?.id) taskMap[t.id] = t;
+        });
+
+        // Format output
+        projectIds.forEach((projId: string) => {
+          const projData = projectMap[projId];
+          if (!projData) return;
+          const proj = projectMap2[projId];
+          const projName = proj?.name || '(unknown project)';
+          const projCode = proj?.code ? `[${proj.code}]` : '';
+          lines.push(`  • ${projCode} ${projName} — ${projData.hours.toFixed(1)}h`);
+
+          const taskIds = Object.keys(projData.tasks);
+          taskIds.forEach((taskId: string) => {
+            const taskData = projData.tasks[taskId];
+            if (!taskData) return;
+            const task = taskMap[taskId];
+            const taskName = task?.name || '(unknown task)';
+            lines.push(`    ◦ ${taskName} — ${taskData.hours.toFixed(1)}h`);
+          });
+        });
+
+        lines.push('');
+        lines.push('For full details with timestamps and notes, call get_timesheet_details with ID above.');
+      }
 
       return textResponse(lines.join('\n'));
     } catch (err) {
