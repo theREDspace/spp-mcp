@@ -122,8 +122,32 @@ export async function resolveUserByNameOrId(
     const name = `${userResults[0].addr?.first || ''} ${userResults[0].addr?.last || ''}`.trim() || userResults[0].nickname || person_name;
     return { ok: true, entity: { id: userResults[0].id, name }, raw: userResults[0] };
   }
-  return {
-    ok: false,
-    message: `Please provide either person_name or user_id.`
-  };
+   return {
+     ok: false,
+     message: `Please provide either person_name or user_id.`
+   };
+}
+
+// Resolve current user by email
+export async function resolveMe(
+  client: SPPClient,
+  email: string
+): Promise<ResolveResult<{ id: string; name: string }>> {
+  try {
+    const userResults = (await client.list('User', { email }, 1, 0) as any[]) || [];
+    if (!userResults.length) {
+      return {
+        ok: false,
+        message: `No user found with email "${email}".`
+      };
+    }
+    const user = userResults[0];
+    const name = `${user?.addr?.first || ''} ${user?.addr?.last || ''}`.trim() || user?.nickname || user?.id;
+    return { ok: true, entity: { id: user.id, name }, raw: user };
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Error resolving user by email: ${err instanceof Error ? err.message : 'Unknown error'}`
+    };
+  }
 }
