@@ -1,63 +1,21 @@
-import crypto from 'crypto';
 import SPPClient from '../../clients/SPPClient';
-import emailTokenStore, { SppTokenData } from '../../services/EmailTokenStore';
-import stateStore from '../../services/StateStore';
-import type { ToolResponse } from '../tools/types';
 
-// NOTE: All functions expect "email" to be explicitly provided and enforced upstream (middleware/context)!
-
-export function getAuthUrl(email: string): string {
-  const state = crypto.randomUUID();
-  stateStore.set(state, email);
-  return new SPPClient({}).getAuthUrl(state);
-}
-
-// Now expects email to be passed in context!!
-export function getAuthenticatedClient(email: string | undefined | null): SPPClient | null {
-  if (!email) return null;
-  const tokenData = emailTokenStore.get(email);
-  if (!tokenData || !tokenData.accessToken || !tokenData.refreshToken) {
-    return null;
-  }
+/**
+ * Creates an authenticated SPPClient from a Bearer token.
+ * The token is provided by the MCP Client — the server never holds credentials.
+ */
+export function getAuthenticatedClient(token: string | undefined | null): SPPClient | null {
+  if (!token) return null;
   return new SPPClient({
     sppUrl: process.env.SPP_URL as string,
-    clientId: process.env.SPP_CLIENT_ID as string,
-    clientSecret: process.env.SPP_CLIENT_SECRET as string,
-    callbackUrl: process.env.SPP_CALLBACK_URL as string,
-    accessToken: tokenData.accessToken,
-    refreshToken: tokenData.refreshToken,
-    onRefresh: async ({ access_token, refresh_token }: { access_token: string; refresh_token: string }) => {
-      // Re-read current token data from store to avoid spreading stale snapshot
-      const current = emailTokenStore.get(email) ?? tokenData;
-      emailTokenStore.set(email, {
-        ...current,
-        accessToken: access_token,
-        refreshToken: refresh_token,
-      });
-    },
+    accessToken: token,
   });
 }
 
-export function authRequiredResponse(email: string): ToolResponse {
-  const auth_url = getAuthUrl(email);
-  return {
-    content: [
-      {
-        type: 'text',
-        text: [
-          '🔒 Authentication required.',
-          '',
-          `Please authenticate by clicking the link below, then **retry your original request**:`,
-          '',
-          auth_url,
-          '',
-          'Once you have signed in, simply repeat what you asked me to do and I will proceed automatically.',
-        ].join('\n')
-      }
-    ]
-  };
-}
-
-export function isAuthError(err: any) {
-  return err?.name?.includes('SPPAuthError') || err?.detail?.code === '2';
+export function isAuthError(err: any): boolean {
+  return (
+    err?.name?.includes('SPPAuthError') ||
+    err?.detail?.code === '2' ||
+    err?.detail?.code === String(2)
+  );
 }

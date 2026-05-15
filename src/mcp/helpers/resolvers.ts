@@ -128,26 +128,25 @@ export async function resolveUserByNameOrId(
    };
 }
 
-// Resolve current user by email
+// Resolve current user via whoami (uses the access token already set on the client)
 export async function resolveMe(
-  client: SPPClient,
-  email: string
+  client: SPPClient
 ): Promise<ResolveResult<{ id: string; name: string }>> {
   try {
-    const userResults = (await client.list('User', { email }, 1, 0) as any[]) || [];
-    if (!userResults.length) {
+    const user = await client.whoami() as any;
+    if (!user || !user.id) {
       return {
         ok: false,
-        message: `No user found with email "${email}".`
+        message: 'Could not determine the current user. The whoami call returned an empty result.'
       };
     }
-    const user = userResults[0];
-    const name = `${user?.addr?.first || ''} ${user?.addr?.last || ''}`.trim() || user?.nickname || user?.id;
+    const addr = user?.addr ?? {};
+    const name = `${addr.first || ''} ${addr.last || ''}`.trim() || user?.nickname || user?.id;
     return { ok: true, entity: { id: user.id, name }, raw: user };
   } catch (err) {
     return {
       ok: false,
-      message: `Error resolving user by email: ${err instanceof Error ? err.message : 'Unknown error'}`
+      message: `Error resolving current user: ${err instanceof Error ? err.message : 'Unknown error'}`
     };
   }
 }

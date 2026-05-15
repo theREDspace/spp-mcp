@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Tool } from './types';
-import { getAuthenticatedClient, authRequiredResponse } from '../helpers/auth';
+import { getAuthenticatedClient } from '../helpers/auth';
 import { textResponse, errorResponse } from '../helpers/responses';
 import { resolveUserByNameOrId } from '../helpers/resolvers';
 
@@ -14,50 +14,41 @@ const getPersonInfo: Tool = {
   }),
 
   async handler(args, _ctx) {
-     const { person_name, user_id } = args as { person_name?: string; user_id?: string };
+    const { person_name, user_id } = args as { person_name?: string; user_id?: string };
 
-     if (!_ctx?.email) {
-       return textResponse('Missing required email for per-user SPP authentication.');
-     }
+    if (!person_name && !user_id) {
+      return textResponse('Please provide either a person_name or user_id.');
+    }
 
-     if (!person_name && !user_id) {
-       return textResponse('Please provide either a person_name or user_id.');
-     }
+    const client = getAuthenticatedClient(_ctx?.token);
+    if (!client) return textResponse('No authentication token found in request context.');
 
-     const client = getAuthenticatedClient(_ctx?.email);
-     if (!client) return authRequiredResponse(_ctx!.email);
-
-
-    // Resolve user — handles disambiguation and not-found messaging
-    // Build args object without undefined keys to satisfy exactOptionalPropertyTypes
     const resolverArgs: { user_id?: string; person_name?: string } = {};
     if (user_id) resolverArgs.user_id = user_id;
     if (person_name) resolverArgs.person_name = person_name;
+
     let userId: string;
     let user: any;
     try {
       const resolved = await resolveUserByNameOrId(client, resolverArgs);
       if (!resolved.ok) return textResponse(resolved.message);
       userId = resolved.entity.id;
-      // Always fetch full user record to guarantee a complete, fresh response
-      user = await client.read('User', userId);
+      user = await client.read('User', userId) as any;
     } catch (err) {
-      return errorResponse(err, 'fetching person info', '', _ctx!.email);
+      return errorResponse(err, 'fetching person info');
     }
 
-    // Optionally resolve role name
     let roleName: string | null = null;
     const roleId: string | undefined = user?.role_id ?? user?.roleid;
     if (roleId) {
       try {
-        const role = await client.read('Role', roleId);
+        const role = await client.read('Role', roleId) as any;
         roleName = role?.name ?? role?.title ?? null;
       } catch {
-        // Non-fatal — role name stays null
+        // Non-fatal
       }
     }
 
-    // Build human-readable output
     const addr = user?.addr ?? {};
     const firstName: string = addr.first ?? '';
     const lastName: string = addr.last ?? '';

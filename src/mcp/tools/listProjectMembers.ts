@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Tool } from './types';
-import { getAuthenticatedClient, authRequiredResponse } from '../helpers/auth';
+import { getAuthenticatedClient } from '../helpers/auth';
 import { textResponse, errorResponse } from '../helpers/responses';
 import { resolveProjectByNameOrId } from '../helpers/resolvers';
 
@@ -17,28 +17,26 @@ const listProjectMembers: Tool = {
   }),
   async handler(args, _ctx) {
     const { project_id, project_name, limit = 1000, offset = 0, include_inactive = false } = args;
-    if (!_ctx?.email) {
-      return textResponse('Missing required email for per-user SPP authentication.');
+    const client = getAuthenticatedClient(_ctx?.token);
+    if (!client) return textResponse('No authentication token found in request context.');
+
+    const res = await resolveProjectByNameOrId(client, { project_id, project_name });
+    if (!res.ok) {
+      if ('candidates' in res) {
+        const lines = [
+          `Multiple projects found matching "${project_name}":`,
+          '',
+          ...res.candidates.map((p: any) => `- [${p.id}] ${p.name || '(no name)'}${p.code ? ` (Code: ${p.code})` : ''}${p.externalid ? ` (ExternalID: ${p.externalid})` : ''}`),
+          '',
+          'Please specify your project by ID to continue.',
+        ];
+        return textResponse(lines.join('\n'));
+      }
+      return textResponse(res.message);
     }
-    const client = getAuthenticatedClient(_ctx?.email);
-    if (!client) return authRequiredResponse(_ctx!.email);
-     const res = await resolveProjectByNameOrId(client, { project_id, project_name });
-     if (!res.ok) {
-       if ('candidates' in res) {
-         const lines = [
-           `Multiple projects found matching "${project_name}":`,
-           '',
-           ...res.candidates.map((p: any) => `- [${p.id}] ${p.name || '(no name)'}${p.code ? ` (Code: ${p.code})` : ''}${p.externalid ? ` (ExternalID: ${p.externalid})` : ''}`),
-           '',
-           'Please specify your project by ID to continue.',
-         ];
-         return textResponse(lines.join('\n'));
-       }
-       return textResponse(res.message);
-     }
-     // If exactly one project is found, continue as before
-     const finalProjectId = res.entity.id;
-     let projectName = res.entity.name;
+
+    const finalProjectId = res.entity.id;
+    let projectName = res.entity.name;
     try {
       let projectDetails: any = null;
       try {
@@ -99,7 +97,7 @@ const listProjectMembers: Tool = {
     } catch (err) {
       let extra = '';
       if (project_name && !project_id) extra = '\n(Tried to resolve project_name via filters: name/code/externalid and in-memory match)';
-      return errorResponse(err, 'listing project members', extra, _ctx!.email);
+      return errorResponse(err, 'listing project members', extra);
     }
   }
 };

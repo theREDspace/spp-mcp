@@ -1,73 +1,61 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
-import axios from "axios";
 import healthHandler from './routes/health';
-import signinHandler from './routes/signin';
-import getProjectsHandler from './routes/projects';
-import getBookingsHandler from './routes/bookings';
-import { callbackSppGetHandler, callbackSppPostHandler } from './routes/callbackSpp';
-import instructionsHandler from './routes/instructions';
+import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
+import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
+import { callbackSppGetHandler } from './routes/callbackSpp';
+import { oauthTokenHandler } from './routes/oauthToken';
+import { bearerAuthMiddleware } from './middleware/bearerAuth';
 import { initializeMcpTransport } from './mcp/transport';
 
 const app = express();
-const PORT = 3030;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3030;
 
 app.use(express.json());
+// Required for /oauth/token to parse application/x-www-form-urlencoded bodies
+app.use(express.urlencoded({ extended: false }));
 
-// --- Require and validate 'email' header on MCP routes only ---
-// /signin and /callback/spp are exempt: they are part of the OAuth flow itself
-const EMAIL_EXEMPT_PATHS = ['/signin', '/callback/spp', '/health'];
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (EMAIL_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p + '?'))) {
-    return next();
-  }
-  const email = req.header('email');
-  if (!email || !email.trim()) {
-    console.log(`[AUTH] Rejecting request: missing or blank email header from ${req.ip} path=${req.path}`);
-    return res.status(401).json({ error: 'Unauthorized: email header required' });
-  }
-  // Stash email for downstream use
-  (req as any).email = email.trim();
-  next();
-});
+// ---- Discovery endpoints (unauthenticated — RFC 9728 / MCP auth spec) ----
+app.get('/.well-known/oauth-protected-resource', oauthProtectedResourceHandler);
+app.get('/.well-known/oauth-authorization-server', oauthAuthorizationServerHandler);
 
-// ----- SIGNIN ROUTE (SPP OAUTH) -----
-app.get('/signin', signinHandler);
+// ---- OAuth proxy routes (unauthenticated) ----
+// /oauth/authorize  — swaps client's redirect_uri with SPP_CALLBACK_URL, forwards to SPP
+// /callback/spp     — receives SPP's callback, relays to SPP_FORWARD_CALLBACK_URL
+// /oauth/token      — swaps client's redirect_uri with SPP_CALLBACK_URL, proxies token exchange
+app.get('/oauth/authorize', oauthAuthorizeHandler);
+app.get('/callback/spp', callbackSppGetHandler);
+app.post('/oauth/token', oauthTokenHandler);
 
-// Simple error handler middleware
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+// ---- Health (unauthenticated) ----
+app.get('/health', healthHandler);
+
+// ---- Simple error handler middleware ----
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack || err.message);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.get('/health', healthHandler);
-
-// ----- OAUTH2 CALLBACK (GET and POST) ----
-app.get('/callback/spp', callbackSppGetHandler);
-app.post('/callback/spp', callbackSppPostHandler);
-
-// ---- /projects endpoint ----
-app.get('/projects', getProjectsHandler);
-
-// ---- /bookings endpoint ----
-app.get('/bookings', getBookingsHandler);
-
-// ---- /instructions endpoint ----
-app.get('/instructions', instructionsHandler);
-
-// ---- Startup: init MCP then start listening ----
+// ---- Startup: init MCP transport then start listening ----
 async function startServer() {
   try {
     const mcpRouter = await initializeMcpTransport();
-    // Mount at both /mcp and /mcp/ to handle clients with or without trailing slash
-    app.use('/mcp', mcpRouter);
-    app.use('/mcp/', mcpRouter);
+
+    // Bearer auth applied to all /mcp routes
+    app.use('/mcp', bearerAuthMiddleware, mcpRouter);
+    app.use('/mcp/', bearerAuthMiddleware, mcpRouter);
     console.log('[MCP] Server mounted at /mcp');
 
     app.listen(PORT, () => {
+      const baseUrl = (process.env.APP_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
       console.log(`Server listening on port ${PORT}`);
-      console.log(`[SPP-AUTH] Sign-in: ${process.env.APP_BASE_URL}:${PORT}/signin`);
-      console.log(`[MCP] Endpoint: ${process.env.APP_BASE_URL}:${PORT}/mcp`);
+      console.log(`[MCP]  Endpoint:              ${baseUrl}/mcp`);
+      console.log(`[AUTH] Protected resource:     ${baseUrl}/.well-known/oauth-protected-resource`);
+      console.log(`[AUTH] Auth server metadata:   ${baseUrl}/.well-known/oauth-authorization-server`);
+      console.log(`[AUTH] Authorize proxy:        ${baseUrl}/oauth/authorize`);
+      console.log(`[AUTH] Token proxy:            ${baseUrl}/oauth/token`);
+      console.log(`[AUTH] SPP callback relay:     ${baseUrl}/callback/spp`);
+      // Forwarding callback disabled (no SPP_FORWARD_CALLBACK_URL in use).
     });
   } catch (err) {
     console.error('[ERROR] Failed to start server:', err);

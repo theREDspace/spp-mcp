@@ -6,31 +6,25 @@ import { mcpTools } from './tools';
 /**
  * Creates a fresh, fully-registered McpServer + stateless transport per request.
  *
- * WHY STATELESS:
- * The stateful transport (sessionIdGenerator: () => uuid) requires every
- * non-initialize request to carry an `mcp-session-id` header. Clients that
- * don't echo that header (or proxies like ngrok that strip it) will get
- * "Bad Request: Server not initialized" on every tool call.
- *
- * In stateless mode (sessionIdGenerator: undefined) the SDK's validateSession()
- * returns immediately with no checks, so tool calls work without a prior
- * initialize handshake — each POST is a self-contained exchange.
+ * The Bearer token extracted by bearerAuthMiddleware is injected into every
+ * tool's context as `ctx.token`. Tools use it to construct an authenticated
+ * SPPClient — the server never holds credentials itself.
  */
 async function handleWithFreshServer(req: Request, res: Response, body?: unknown) {
   const transport = new NodeStreamableHTTPServerTransport({});
 
   const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
 
-  const email = (req as any).email || req.header('email') || 'UNKNOWN_EMAIL';
+  const token = (req as any).bearerToken as string;
+
   for (const tool of mcpTools) {
     server.registerTool(
       tool.name,
       { title: tool.name, description: tool.description, inputSchema: tool.inputSchema },
-      // Wrap handler to inject email and log usage
       (input, context) => {
-        console.log(`[MCP][Tool=${tool.name}] Invoked by email=${email}`);
-        const ctxWithEmail = { ...context, email };
-        return tool.handler(input, ctxWithEmail);
+        console.log(`[MCP][Tool=${tool.name}] Invoked`);
+        const ctxWithToken = { ...context, token };
+        return tool.handler(input, ctxWithToken);
       }
     );
   }

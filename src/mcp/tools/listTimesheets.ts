@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Tool } from './types';
-import { getAuthenticatedClient, authRequiredResponse } from '../helpers/auth';
+import { getAuthenticatedClient } from '../helpers/auth';
 import { textResponse, errorResponse } from '../helpers/responses';
 import { resolveMe } from '../helpers/resolvers';
 import { dateContainerToDate, formatMMDDYYYY, parseMMDDYYYY } from '../helpers/dates';
@@ -13,7 +13,6 @@ const STATUS_MAP: Record<string, string> = {
   X: 'Rejected',
 };
 
-// Map enum values to SPP status codes
 const STATUS_TO_CODE: Record<string, string[]> = {
   open: ['O'],
   submitted: ['S'],
@@ -35,79 +34,53 @@ const listTimesheets: Tool = {
   async handler(args, _ctx) {
     const { status, since, until, limit } = args;
 
-    if (!_ctx?.email) {
-      return textResponse('Missing required email for per-user SPP authentication.');
-    }
-
-    const client = getAuthenticatedClient(_ctx?.email);
-    if (!client) return authRequiredResponse(_ctx!.email);
+    const client = getAuthenticatedClient(_ctx?.token);
+    if (!client) return textResponse('No authentication token found in request context.');
 
     try {
-      // Resolve current user by email
-      const resolved = await resolveMe(client, _ctx.email);
+      const resolved = await resolveMe(client);
       if (!resolved.ok) return textResponse(resolved.message);
 
-      // Fetch timesheets (over-fetch for client-side filtering)
       const timesheets = (await client.list('Timesheet', { userid: resolved.entity.id }, limit * 3, 0) as any[]) || [];
 
       if (!timesheets.length) {
         return textResponse('You have no timesheets.');
       }
 
-      // Parse date filters if provided
       let sinceDate: Date | null = null;
       let untilDate: Date | null = null;
 
       if (since) {
         sinceDate = parseMMDDYYYY(since);
-        if (!sinceDate) {
-          return textResponse(`Invalid "since" date format: ${since}. Use MM/DD/YYYY.`);
-        }
+        if (!sinceDate) return textResponse(`Invalid "since" date format: ${since}. Use MM/DD/YYYY.`);
       }
 
       if (until) {
         untilDate = parseMMDDYYYY(until);
-        if (!untilDate) {
-          return textResponse(`Invalid "until" date format: ${until}. Use MM/DD/YYYY.`);
-        }
+        if (!untilDate) return textResponse(`Invalid "until" date format: ${until}. Use MM/DD/YYYY.`);
       }
 
-      // Get status codes to filter by
       const statusCodes = status ? STATUS_TO_CODE[status] : null;
 
-      // Filter results client-side
       let filtered = timesheets.filter((ts: any) => {
-        // Filter by status if provided
-        if (statusCodes && !statusCodes.includes(ts.status)) {
-          return false;
-        }
-
-        // Filter by date range if provided
+        if (statusCodes && !statusCodes.includes(ts.status)) return false;
         if (sinceDate) {
           const tsStartsDate = dateContainerToDate(ts.starts);
-          if (!tsStartsDate || tsStartsDate < sinceDate) {
-            return false;
-          }
+          if (!tsStartsDate || tsStartsDate < sinceDate) return false;
         }
-
         if (untilDate) {
           const tsEndsDate = dateContainerToDate(ts.ends);
-          if (!tsEndsDate || tsEndsDate > untilDate) {
-            return false;
-          }
+          if (!tsEndsDate || tsEndsDate > untilDate) return false;
         }
-
         return true;
       });
 
-      // Sort by starts desc (most recent first)
       filtered.sort((a: any, b: any) => {
         const dateA = dateContainerToDate(a.starts)?.getTime() ?? 0;
         const dateB = dateContainerToDate(b.starts)?.getTime() ?? 0;
         return dateB - dateA;
       });
 
-      // Slice to limit
       const displayed = filtered.slice(0, limit);
 
       if (!displayed.length) {
@@ -116,7 +89,6 @@ const listTimesheets: Tool = {
         return textResponse(`No timesheets found${filterDesc}${dateDesc}.`);
       }
 
-      // Format output as compact table-like list
       const lines: string[] = [
         `Your timesheets (showing ${displayed.length} of ${filtered.length}):`,
         '',
@@ -125,17 +97,13 @@ const listTimesheets: Tool = {
       displayed.forEach((ts: any, idx: number) => {
         const startsDate = dateContainerToDate(ts.starts);
         const endsDate = dateContainerToDate(ts.ends);
-
         const periodStr =
           startsDate && endsDate
             ? `${formatMMDDYYYY(startsDate)}–${formatMMDDYYYY(endsDate)}`
             : '(unknown period)';
-
         const statusCode = ts.status || 'O';
         const statusText = STATUS_MAP[statusCode] || `Unknown (${statusCode})`;
-
         const totalHours = ts.total ?? 0;
-
         lines.push(`${idx + 1}. ${periodStr}   ${statusText}   ${totalHours.toFixed(1)}h   (id: ${ts.id})`);
       });
 
@@ -144,7 +112,7 @@ const listTimesheets: Tool = {
 
       return textResponse(lines.join('\n'));
     } catch (err) {
-      return errorResponse(err, 'listing your timesheets', '', _ctx!.email);
+      return errorResponse(err, 'listing your timesheets');
     }
   },
 };
