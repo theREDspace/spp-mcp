@@ -33,6 +33,12 @@ export async function oauthTokenHandler(req: Request, res: Response) {
     body.redirect_uri = callbackUrl;
   }
 
+  // Strip PKCE code_verifier — SPP does not support PKCE
+  if (body.code_verifier) {
+    console.log('[OAUTH-TOKEN] Stripping code_verifier (PKCE not supported by SPP)');
+    delete body.code_verifier;
+  }
+
   try {
     const tokenUrl = `${sppUrl}/login/oauth2/v1/token`;
 

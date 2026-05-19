@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pendingAuthRequests } from './oauthState';
 
 /**
  * GET /oauth/authorize
@@ -25,7 +26,20 @@ export function oauthAuthorizeHandler(req: Request, res: Response) {
 
   // Take all query params from the client, override redirect_uri with our fixed one
   const params = new URLSearchParams(req.query as Record<string, string>);
+
+  // Remember the client's original redirect_uri so /callback/spp can relay back
+  const clientRedirectUri = params.get('redirect_uri');
+  const state = params.get('state');
+  if (state && clientRedirectUri) {
+    pendingAuthRequests.set(state, clientRedirectUri);
+  }
+
   params.set('redirect_uri', callbackUrl);
+
+  // Strip PKCE — SPP does not support it for API Integration apps
+  params.delete('code_challenge');
+  params.delete('code_challenge_method');
+  console.log('[OAUTH-PROXY] Stripped PKCE params (not supported by SPP)');
 
   const sppAuthorizeUrl = `${sppUrl}/login/oauth2/v1/authorize?${params.toString()}`;
 

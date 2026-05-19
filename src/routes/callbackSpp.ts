@@ -1,35 +1,43 @@
 import { Request, Response } from 'express';
+import { pendingAuthRequests } from './oauthState';
 
 /**
  * GET /callback/spp
  *
  * Authorization code relay: SPP redirects here after the user authenticates.
- * We forward ALL query params (code, state, error, etc.) unchanged to
- * SPP_FORWARD_CALLBACK_URL — the URL the MCP client (e.g. MCP Inspector)
- * is actually listening on.
- *
- * The MCP client then exchanges the code directly with SPP's token endpoint.
- * This server never touches tokens or credentials.
+ * We look up the client's original redirect_uri (stored during /oauth/authorize)
+ * using the `state` param, then forward all query params there.
  */
 export function callbackSppGetHandler(req: Request, res: Response) {
-  // Middleman proxy/forward logic removed. Handler now disables SPP forwarding by default.
-  res.status(501).send('SPP forwarding callback is not supported. No SPP_FORWARD_CALLBACK_URL; flow not proxied.');
-  return;
-}
-  const forwardUrl = (process.env.SPP_FORWARD_CALLBACK_URL || '').replace(/\/$/, '');
+  const state = req.query.state as string | undefined;
 
-  if (!forwardUrl) {
-    console.error('[OAUTH-RELAY] SPP_FORWARD_CALLBACK_URL is not set.');
-    res.status(500).send(
-      'Server misconfiguration: SPP_FORWARD_CALLBACK_URL is not set. ' +
-      'Set it to your MCP client\'s callback URL (e.g. http://localhost:6274/oauth/callback).'
-    );
+  if (!state) {
+    res.status(400).send('Missing state parameter in SPP callback.');
     return;
   }
 
-  const params = new URLSearchParams(req.query as Record<string, string>);
-  const redirectTo = `${forwardUrl}?${params.toString()}`;
+  const clientRedirectUri = pendingAuthRequests.get(state);
+  if (!clientRedirectUri) {
+    // Fallback to env var if state not found (e.g. server restarted mid-flow)
+    const fallback = (process.env.SPP_FORWARD_CALLBACK_URL || '').replace(/\/$/, '');
+    if (!fallback) {
+      res.status(400).send(
+        'Could not determine client redirect URI. State not found and SPP_FORWARD_CALLBACK_URL not set.'
+      );
+      return;
+    }
+    const params = new URLSearchParams(req.query as Record<string, string>);
+    console.log(`[OAUTH-RELAY] State not found, using fallback → ${fallback}`);
+    res.redirect(`${fallback}?${params.toString()}`);
+    return;
+  }
 
-  console.log(`[OAUTH-RELAY] Relaying SPP callback → ${forwardUrl}`);
+  // Clean up
+  pendingAuthRequests.delete(state);
+
+  const params = new URLSearchParams(req.query as Record<string, string>);
+  const redirectTo = `${clientRedirectUri}?${params.toString()}`;
+
+  console.log(`[OAUTH-RELAY] Relaying SPP callback → ${clientRedirectUri}`);
   res.redirect(redirectTo);
 }

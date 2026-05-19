@@ -39,7 +39,7 @@ export function oauthAuthorizationServerHandler(_req: Request, res: Response) {
     // authorization_endpoint points directly to SPP so the MCP client opens SPP's
     // real login page. SPP_CALLBACK_URL must be registered as the redirect_uri in
     // the SPP OAuth app — MCP Inspector must be configured to use it as well.
-    authorization_endpoint: `${sppUrl}/login/oauth2/v1/authorize`,
+    authorization_endpoint: `${serverUrl}/oauth/authorize`,
     // token_endpoint is proxied through this server so we can swap the MCP client's
     // redirect_uri for SPP_CALLBACK_URL before forwarding to SPP.
     token_endpoint: `${serverUrl}/oauth/token`,
