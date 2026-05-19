@@ -1,22 +1,29 @@
 import listProjects from './listProjects';
 import listBookings from './listBookings';
-import listProjectMembers from './listProjectMembers';
-import getUserWorkLastWeek from './getUserWorkLastWeek';
-import getPersonInfo from './getPersonInfo';
-import getMe from './getMe';
-import getMyLatestTimesheet from './getMyLatestTimesheet';
 import listTimesheets from './listTimesheets';
-import getTimesheetDetails from './getTimesheetDetails';
+import searchProjects from './searchProjects';
+import getProject from './getProject';
+import searchUsers from './searchUsers';
+import getUser from './getUser';
+import listProjectAssignments from './listProjectAssignments';
+import listTimeEntries from './listTimeEntries';
+import getTimesheet from './getTimesheet';
 import type { Tool } from './types';
 
 export const mcpTools: Tool[] = [
+  // Discovery
+  searchProjects,
+  searchUsers,
+  // Projects
   listProjects,
-  listBookings,
-  listProjectMembers,
-  getUserWorkLastWeek,
-  getPersonInfo,
-  getMe,
-  getMyLatestTimesheet,
+  getProject,
+  listProjectAssignments,
+  // Users
+  getUser,
+  // Time
+  listTimeEntries,
   listTimesheets,
-  getTimesheetDetails,
+  getTimesheet,
+  // Bookings
+  listBookings,
 ];

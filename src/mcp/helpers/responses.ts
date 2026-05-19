@@ -9,18 +9,28 @@ export function textResponse(text: string): ToolResponse {
   };
 }
 
+export function jsonResponse(data: unknown): ToolResponse {
+  return {
+    content: [
+      { type: 'text', text: JSON.stringify(data, null, 2) }
+    ]
+  };
+}
+
 export function errorResponse(
   err: any,
   label: string,
   extra: string = ''
 ): ToolResponse {
   if (isAuthError(err)) {
-    return textResponse(
-      `Authentication error while ${label}. Your token may be expired — please re-authenticate and retry.`
-    );
+    return jsonResponse({
+      error: `Authentication error while ${label}. Your token may be expired — please re-authenticate and retry.`
+    });
   }
-  const errDetail = err?.detail ? ` [code: ${err.detail.code}, detail: ${err.detail.message}]` : '';
-  return textResponse(
-    `Error ${label}: ${err?.message || 'Unknown error'}${errDetail}${extra}`
-  );
+  const detail = err?.detail?.message || err?.message || 'Unknown error';
+  const code = err?.detail?.code;
+  return jsonResponse({
+    error: `Error ${label}: ${detail}${extra}`,
+    ...(code !== undefined && { code }),
+  });
 }
