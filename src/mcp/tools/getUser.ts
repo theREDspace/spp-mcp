@@ -59,7 +59,7 @@ const getUser: Tool = {
         country: addr.country || null,
       });
     } catch (err) {
-      return errorResponse(err, 'fetching user');
+      return errorResponse(err, 'fetching user', 'User');
     }
   },
 };

@@ -5,6 +5,7 @@ import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from '
 import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
 import { callbackSppGetHandler } from './routes/callbackSpp';
 import { oauthTokenHandler } from './routes/oauthToken';
+import { oauthRegisterHandler } from './routes/oauthRegister';
 import { bearerAuthMiddleware } from './middleware/bearerAuth';
 import { initializeMcpTransport } from './mcp/transport';
 
@@ -26,6 +27,7 @@ app.get('/.well-known/oauth-authorization-server', oauthAuthorizationServerHandl
 app.get('/oauth/authorize', oauthAuthorizeHandler);
 app.get('/callback/spp', callbackSppGetHandler);
 app.post('/oauth/token', oauthTokenHandler);
+app.post('/oauth/register', oauthRegisterHandler);
 
 // ---- Health (unauthenticated) ----
 app.get('/health', healthHandler);

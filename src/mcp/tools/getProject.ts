@@ -3,6 +3,7 @@ import type { Tool } from './types';
 import { getAuthenticatedClient } from '../helpers/auth';
 import { jsonResponse, errorResponse } from '../helpers/responses';
 import { dateContainerToDate, formatISODate } from '../helpers/dates';
+import { resolveProjectStages } from '../helpers/projectStage';
 
 const getProject: Tool = {
   name: 'get_project',
@@ -23,13 +24,19 @@ const getProject: Tool = {
       const startDate = dateContainerToDate(p.start_date);
       const finishDate = dateContainerToDate(p.finish_date);
 
+      const stageId = p.project_stageid ?? null;
+      const stageMap = stageId != null
+        ? await resolveProjectStages(client, new Set([stageId]))
+        : new Map<string, string>();
+
       return jsonResponse({
         id: p.id,
         name: p.name || null,
         code: p.code || null,
         externalid: p.externalid || null,
         active: p.active,
-        status: p.project_stageid || null,
+        status: stageId,
+        status_label: stageId != null ? (stageMap.get(String(stageId)) ?? null) : null,
         budget: p.budget ?? null,
         budget_time: p.budget_time ?? null,
         currency: p.currency || null,
@@ -41,7 +48,7 @@ const getProject: Tool = {
         userid: p.userid || null,
       });
     } catch (err) {
-      return errorResponse(err, 'fetching project');
+      return errorResponse(err, 'fetching project', 'Project');
     }
   },
 };

@@ -80,7 +80,7 @@ const searchUsers: Tool = {
         search_method: strategy,
       });
     } catch (err) {
-      return errorResponse(err, 'searching users');
+      return errorResponse(err, 'searching users', 'User');
     }
   },
 };

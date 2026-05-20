@@ -90,7 +90,7 @@ const listTimeEntries: Tool = {
         by_project: byProject,
       });
     } catch (err) {
-      return errorResponse(err, 'fetching time entries');
+      return errorResponse(err, 'fetching time entries', 'Slip');
     }
   },
 };

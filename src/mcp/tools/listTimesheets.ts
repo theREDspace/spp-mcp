@@ -110,7 +110,7 @@ const listTimesheets: Tool = {
         offset,
       });
     } catch (err) {
-      return errorResponse(err, 'listing timesheets');
+      return errorResponse(err, 'listing timesheets', 'Timesheet');
     }
   },
 };

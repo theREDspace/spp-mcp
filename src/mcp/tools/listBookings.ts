@@ -59,6 +59,21 @@ const listBookings: Tool = {
 
       const page = filtered.slice(offset, offset + limit);
 
+      // Enrich with user names (non-fatal: falls back to null if User BO is inaccessible)
+      const userIds = [...new Set(page.map((b: any) => b.userid).filter(Boolean))] as string[];
+      const userMap = new Map<string, string>();
+      if (userIds.length) {
+        try {
+          const users = (await client.batchList('User', userIds.map(id => ({ id })), 1000, 0) as any[]) || [];
+          for (const u of users) {
+            if (!u?.id) continue;
+            const addr = u.addr ?? {};
+            const name = [addr.first, addr.last].filter(Boolean).join(' ') || u.nickname || null;
+            if (name) userMap.set(String(u.id), name);
+          }
+        } catch { /* non-fatal — return without enrichment */ }
+      }
+
       return jsonResponse({
         bookings: page.map((b: any) => {
           const startDateVal = dateContainerToDate(b.startdate);
@@ -66,6 +81,7 @@ const listBookings: Tool = {
           return {
             id: b.id,
             user_id: b.userid || null,
+            user_name: userMap.get(String(b.userid)) ?? null,
             project_id: b.projectid || null,
             project_task_id: b.project_taskid || null,
             customer_id: b.customerid || null,
@@ -85,7 +101,7 @@ const listBookings: Tool = {
         offset,
       });
     } catch (err) {
-      return errorResponse(err, 'listing bookings');
+      return errorResponse(err, 'listing bookings', 'Booking');
     }
   },
 };

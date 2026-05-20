@@ -7,8 +7,7 @@ export class XmlBuilder {
    */
   private static readonly SPP_TYPE_NAME_MAP: Record<string, string> = {
     ProjectAssign: "Projectassign",
-    ProjectAssignmentProfile: "ProjectAssignmentProfile",
-    ProjectTaskAssign: "ProjectTaskAssign",
+    ProjectTask: "Projecttask",
   };
 
   /**
@@ -18,8 +17,7 @@ export class XmlBuilder {
    */
   private static readonly FILTER_ELEMENT_MAP: Record<string, string> = {
     Projectassign: "ProjectAssign",
-    ProjectAssignmentProfile: "ProjectAssignmentProfile",
-    ProjectTaskAssign: "ProjectTaskAssign",
+    Projecttask: "ProjectTask",
   };
 
   /** Resolves the correct SPP XML API type name for a given BOName. */
@@ -72,7 +70,11 @@ export class XmlBuilder {
         : "";
 
     return `<Read type="${sppType}" enable_custom="1" method="${actualMethod}" limit="${
-      offset > 0 ? `${offset},${limit}` : limit
+      // offset >= 0: always emit "offset,limit" format so real pagination works correctly
+      // when callers pass offset=0 explicitly (which BOService always does).
+      // The default parameter offset=-1 is only hit when buildGet is called directly
+      // without an offset argument — that path emits "limit" only (no offset prefix).
+      offset >= 0 ? `${offset},${limit}` : limit
     }"${nullFilter ? ' empty_is_nil="false"' : ""}${fieldAttr}>
   ${filterXML}
 </Read>`;

@@ -35,7 +35,7 @@ const searchProjects: Tool = {
 
       return jsonResponse({ results: results.slice(0, limit), count: results.length });
     } catch (err) {
-      return errorResponse(err, 'searching projects');
+      return errorResponse(err, 'searching projects', 'Project');
     }
   },
 };

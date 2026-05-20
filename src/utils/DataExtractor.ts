@@ -49,7 +49,7 @@ export class DataExtractor {
         const info       = SPPStatusInfo[statusEnum] || SPPStatusInfo[SPPStatus.UnknownError];
         const detail: SPPErrorDetail = {
           code:    statusEnum.toString(),
-          message: potentialStatusContainer.errors || info.description!
+          message: (typeof potentialStatusContainer.errors === 'string' && potentialStatusContainer.errors) ? potentialStatusContainer.errors : (info.description ?? 'Unknown SPP error')
         };
         throw new SPPBusinessError(statusEnum, detail);
       }

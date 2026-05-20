@@ -84,7 +84,7 @@ const getTimesheet: Tool = {
         by_project: byProject,
       });
     } catch (err) {
-      return errorResponse(err, 'fetching timesheet');
+      return errorResponse(err, 'fetching timesheet', 'Timesheet');
     }
   },
 };

@@ -60,7 +60,7 @@ const listProjectAssignments: Tool = {
 
       return jsonResponse({ project_id, assignments: result, count: result.length });
     } catch (err) {
-      return errorResponse(err, 'listing project assignments');
+      return errorResponse(err, 'listing project assignments', 'ProjectAssign');
     }
   },
 };

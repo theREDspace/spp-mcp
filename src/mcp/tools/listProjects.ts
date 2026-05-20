@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Tool } from './types';
 import { getAuthenticatedClient } from '../helpers/auth';
 import { jsonResponse, errorResponse } from '../helpers/responses';
+import { resolveProjectStages } from '../helpers/projectStage';
 
 const listProjects: Tool = {
   name: 'list_projects',
@@ -22,21 +23,31 @@ const listProjects: Tool = {
       const effectiveFilter = { ...filter, ...(active_only ? { active: 1 } : {}) };
       const projects = (await client.list('Project', effectiveFilter, limit, offset) as any[]) || [];
 
+      // Resolve all unique stage IDs to human-readable names in one batch
+      const stageIds = new Set(projects.map((p: any) => p.project_stageid).filter((id: any) => id != null));
+      const stageMap = stageIds.size > 0
+        ? await resolveProjectStages(client, stageIds)
+        : new Map<string, string>();
+
       return jsonResponse({
-        projects: projects.map((p: any) => ({
-          id: p.id,
-          name: p.name || null,
-          code: p.code || null,
-          active: p.active,
-          status: p.project_stageid || null,
-          customer_id: p.customerid || null,
-        })),
+        projects: projects.map((p: any) => {
+          const stageId = p.project_stageid ?? null;
+          return {
+            id: p.id,
+            name: p.name || null,
+            code: p.code || null,
+            active: p.active,
+            status: stageId,
+            status_label: stageId != null ? (stageMap.get(String(stageId)) ?? null) : null,
+            customer_id: p.customerid || null,
+          };
+        }),
         count: projects.length,
         limit,
         offset,
       });
     } catch (err) {
-      return errorResponse(err, 'listing projects');
+      return errorResponse(err, 'listing projects', 'Project');
     }
   },
 };

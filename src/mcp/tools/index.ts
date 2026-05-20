@@ -1,4 +1,6 @@
 import listProjects from './listProjects';
+import listProjectTasks from './listProjectTasks';
+import getBookingSummary from './getBookingSummary';
 import listBookings from './listBookings';
 import listTimesheets from './listTimesheets';
 import searchProjects from './searchProjects';
@@ -26,4 +28,8 @@ export const mcpTools: Tool[] = [
   getTimesheet,
   // Bookings
   listBookings,
+  // Tasks
+  listProjectTasks,
+  // Booking Summaries
+  getBookingSummary,
 ];
