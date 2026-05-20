@@ -47,6 +47,11 @@ A complete map of user questions to the MCP tools the client invokes.
 | "Show my rejected timesheets from Q1 2026" | `list_timesheets(status: "rejected", start_date: "2026-01-01", end_date: "2026-03-31")` |
 | "How many hours total on my latest timesheet?" | `get_timesheet()` → inspect `total` field |
 | "Show detailed breakdown by project/task for my timesheet" | `get_timesheet(timesheet_id: "...")` |
+| "Log 8h per day for ProjectX, week of May 11" | `add_time_entry(entries=[{date: '2026-05-11', hours: 8}, ...])` (all entries must be from the same week) |
+| "Update yesterday's time entry to 6.5h" | `update_time_entry(entry_id: "...", hours: 6.5)` |
+| "Delete these 3 entries I accidentally logged" | `delete_time_entry(entry_ids: ["...", "...", "..."])` (all entries must be from the same week/timesheet) |
+| "Submit my timesheet for this week" | `submit_timesheet(timesheet_id: "...")` |
+| "Copy last week's timesheet (but exclude holiday Monday)" | `clone_timesheet(source_timesheet_id: "...", exclude_days: ["2026-05-18"])` |
 
 ---
 
