@@ -10,6 +10,11 @@ import getUser from './getUser';
 import listProjectAssignments from './listProjectAssignments';
 import listTimeEntries from './listTimeEntries';
 import getTimesheet from './getTimesheet';
+import addTimeEntry from './addTimeEntry';
+import updateTimeEntry from './updateTimeEntry';
+import deleteTimeEntry from './deleteTimeEntry';
+import submitTimesheet from './submitTimesheet';
+import cloneTimesheet from './cloneTimesheet';
 import type { Tool } from './types';
 
 export const mcpTools: Tool[] = [
@@ -22,10 +27,16 @@ export const mcpTools: Tool[] = [
   listProjectAssignments,
   // Users
   getUser,
-  // Time
+  // Time (Read)
   listTimeEntries,
   listTimesheets,
   getTimesheet,
+  // Time (Write)
+  addTimeEntry,
+  updateTimeEntry,
+  deleteTimeEntry,
+  submitTimesheet,
+  cloneTimesheet,
   // Bookings
   listBookings,
   // Tasks

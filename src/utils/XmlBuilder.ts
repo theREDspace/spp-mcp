@@ -180,6 +180,19 @@ export class XmlBuilder {
       .join("\n");
   }
 
+  // ─── SUBMIT ──────────────────────────────────────────────────────
+  /**
+   * Build Submit XML command for submitting a business object (e.g., Timesheet).
+   * Typically used to submit a Timesheet for approval.
+   */
+  static buildSubmit(type: string, id: string): string {
+    return `<Submit type="${type}">
+  <${type}>
+    <id>${id}</id>
+  </${type}>
+</Submit>`;
+  }
+
   // ─── CREATEUSER ──────────────────────────────────────────────────
   /**
    * Build CreateUser XML command for adding or updating a User object
