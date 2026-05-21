@@ -103,6 +103,66 @@ export async function resolveSourceTimesheet(
 }
 
 /**
+ * Ensures a timesheet exists (opens/creates if missing).
+ */
+const timesheetCache = new Map<string, { ok: true; timesheet: any } | { ok: false; message: string }>();
+
+export async function ensureOpenTimesheet(
+  client: SPPClient,
+  userId: string,
+  targetDate?: Date
+): Promise<TimesheetResult> {
+  const cacheKey = `${userId}:${targetDate?.toISOString() ?? "default"}`;
+if (timesheetCache.has(cacheKey)) {
+  return timesheetCache.get(cacheKey)!;
+}
+
+try {
+  const startDate = new Date(targetDate || new Date());
+  startDate.setUTCHours(0, 0, 0, 0);
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 6);
+
+  const created = await client.add("Timesheet", {
+    userid: userId,
+    status: "O",
+    starts: startDate.toISOString(),
+    ends: endDate.toISOString(),
+  });
+  return { ok: true, timesheet: created };
+} catch (err) {
+  if ((err as Error)?.message?.includes("already exists")) {
+    const resolved: TimesheetResult = await resolveOpenTimesheet(client, userId, targetDate);
+    if (resolved.ok) {
+      timesheetCache.set(cacheKey, resolved);
+      return resolved;
+}
+  return { ok: false, message: `Error ensuring open timesheet: ${err instanceof Error ? err.message : "Unknown error"}` };
+  }
+}
+
+  try {
+    const startDate = new Date(targetDate || new Date());
+    startDate.setUTCHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+
+    const created = await client.add("Timesheet", {
+      ...(process.env.MUTEX_ID_ENABLED && { mutex_id: cacheKey.toLowerCase() }),
+      userid: userId,
+      status: "O",
+      starts: startDate.toISOString(),
+      ends: endDate.toISOString(),
+    });
+  const result: TimesheetResult = { ok: true, timesheet: created };
+  timesheetCache.set(cacheKey, result);
+  return result;
+  } catch (err) {
+return { ok: false, message: (err as Error)?.message || "Unknown error" };
+  }
+}
+
+/**
  * Validates that a JS Date falls within a timesheet's starts–ends range.
  */
 export function isDateInTimesheet(date: Date, timesheet: any): boolean {
