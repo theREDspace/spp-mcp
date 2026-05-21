@@ -48,3 +48,11 @@ Depending on your OpenCode version, you can either:
 - OAuth is required for the tool calls
 - `REGISTRATION_SECRET` is recommended when the server is not private
 - If a tool is missing, check the MCP endpoint first in Inspector before blaming the client
+- If auth gets flaky, reset the stored credentials and sign in again:
+
+```bash
+opencode mcp logout redspace-spp
+opencode mcp auth redspace-spp
+```
+
+OpenCode also supports `opencode mcp list` and `opencode mcp debug redspace-spp` if you want to inspect the auth state or troubleshoot the flow.
