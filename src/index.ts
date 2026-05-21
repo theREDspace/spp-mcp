@@ -1,5 +1,8 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
+// DEBUG: Log critical SPP env vars at startup
+console.log('[DEBUG] SPP_NAMESPACE:', process.env.SPP_NAMESPACE);
+console.log('[DEBUG] SPP_KEY:', process.env.SPP_KEY);
 import healthHandler from './routes/health';
 import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
 import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
@@ -39,8 +42,20 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 // ---- Startup: init MCP transport then start listening ----
+import { validateEnvVars } from './utils/validateEnvVars';
+
 async function startServer() {
   try {
+    // Check all critical env vars
+    validateEnvVars([
+      'SPP_URL',
+      'SPP_CLIENT_ID',
+      'SPP_CLIENT_SECRET',
+      'SPP_CALLBACK_URL',
+      'SPP_NAMESPACE',
+      'SPP_KEY',
+    ]);
+
     const mcpRouter = await initializeMcpTransport();
 
     // Bearer auth applied to all /mcp routes

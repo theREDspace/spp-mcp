@@ -40,6 +40,8 @@ SPP_CLIENT_ID=...
 SPP_CLIENT_SECRET=...
 SPP_CALLBACK_URL=https://your-ngrok-domain/callback/spp
 APP_BASE_URL=https://your-ngrok-domain
+SPP_NAMESPACE=your-namespace
+SPP_KEY=your-key
 ```
 
 Optional, but recommended if you expose the server publicly:

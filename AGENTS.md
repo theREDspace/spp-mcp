@@ -19,6 +19,8 @@ This file is for OpenCode-type agents, NOT humans. Maintain/expand only with rep
   - `SPP_CLIENT_ID`        — OAuth2 client ID (from SPP)
   - `SPP_CLIENT_SECRET`    — OAuth2 client secret (from SPP)
   - `SPP_CALLBACK_URL`     — OAuth2 callback URL (publicly reachable)
+  - `SPP_NAMESPACE`        — SPP API namespace (required for XML API)
+  - `SPP_KEY`              — SPP API key (required for XML API)
 
 ## Entrypoints & Core Modules
 - Main entry: `src/index.ts` (Express HTTP server, listen 3030 default; see root-level README for route docs)
