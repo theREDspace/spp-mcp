@@ -4,7 +4,7 @@ import { getAuthenticatedClient } from '../helpers/auth';
 import { jsonResponse, errorResponse } from '../helpers/responses';
 import { resolveMe } from '../helpers/resolvers';
 import { parseISODate, formatISODate, dateContainerToDate } from '../helpers/dates';
-import { ensureOpenTimesheet, isDateInTimesheet } from '../helpers/timesheetResolver';
+import { ensureOpenTimesheet, isDateInTimesheet, resolveOpenTimesheet } from '../helpers/timesheetResolver';
 
 const addTimeEntry: Tool = {
   name: 'add_time_entry',

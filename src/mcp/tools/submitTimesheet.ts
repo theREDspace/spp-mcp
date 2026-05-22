@@ -4,7 +4,7 @@ import { getAuthenticatedClient } from '../helpers/auth';
 import { jsonResponse, errorResponse } from '../helpers/responses';
 import { resolveMe } from '../helpers/resolvers';
 import { dateContainerToDate, formatISODate } from '../helpers/dates';
-import { ensureOpenTimesheet } from '../helpers/timesheetResolver';
+import { ensureOpenTimesheet, resolveOpenTimesheet } from '../helpers/timesheetResolver';
 import { XmlBuilder } from '../../utils/XmlBuilder';
 
 const STATUS_MAP: Record<string, string> = {
