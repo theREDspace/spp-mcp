@@ -1,3 +1,128 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+An HTTP MCP server for SuiteProjects Pro. Wraps OAuth2, proxies SPP API calls, and exposes tools for projects, users, bookings, time entries, and timesheets.
+
+- **Port:** 3030
+- **MCP Endpoint:** `/mcp`
+- **Language:** TypeScript (Node 20+)
+- **Key Library:** `@modelcontextprotocol/express`, `axios`, `fast-xml-parser`
+
+## Development
+
+### Common Commands
+
+```bash
+npm run dev           # Dev mode (hot reload with ts-node-dev)
+npm run build         # TypeScript compile + esbuild
+npm start             # Production start from dist/
+npm test              # Run Jest tests
+npx jest path/to/file.test.ts  # Single test file
+```
+
+### Prerequisites & Setup
+
+1. Copy `.env.sample` to `.env` and fill in required variables:
+   - `SPP_URL` — SuiteProjects Pro instance URL
+   - `SPP_CLIENT_ID`, `SPP_CLIENT_SECRET` — OAuth app credentials
+   - `SPP_CALLBACK_URL` — OAuth callback (e.g., `https://your-ngrok-domain/callback/spp`)
+   - `APP_BASE_URL` — Public server URL for MCP clients
+   - `SPP_NAMESPACE`, `SPP_KEY` — Required for SPP API calls
+   - `REGISTRATION_SECRET` — Optional, recommended for public `/oauth/register`
+
+2. Create a SuiteProjects Pro API Integration app and register the callback URL
+
+3. Use ngrok for public tunnel in dev/test:
+   ```bash
+   ngrok http 3030
+   # Then update APP_BASE_URL and SPP_CALLBACK_URL in .env
+   ```
+
+### Testing with MCP Inspector
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Point to `https://your-ngrok-domain/mcp` with OAuth auth.
+
+## Architecture
+
+### Entry Point
+- `src/index.ts` — Express server setup, auth middleware, route registration
+
+### Core Layers
+
+**API Client** — `src/clients/SPPClient.ts`
+- Single source for all SPP API access
+- Handles OAuth2, XML parsing, error handling
+- Never call SPP directly; always go through `SPPClient`
+
+**Routes** — `src/routes/`
+- `/mcp` — MCP protocol endpoint
+- `/health` — Health check
+- `/callback/spp` — OAuth2 callback
+- `/oauth/authorize`, `/oauth/token`, `/oauth/register` — OAuth proxy
+
+**MCP Tools** — `src/mcp/tools/`
+- Each tool is a standalone module: `listProjects.ts`, `addTimeEntry.ts`, etc.
+- `src/mcp/tools/index.ts` — Tool registry
+- `src/mcp/tools/types.ts` — Shared types and response structures
+
+**Services** — `src/services/`
+- Business logic for projects, bookings, users, timesheets, time entries
+- Consumed by MCP tools
+
+**Types** — `src/types/`
+- Business objects and API schemas (generated from SPP)
+- Do not edit directly if auto-generated
+
+**Middleware** — `src/middleware/`
+- `bearerAuth.ts` — OAuth token validation
+
+**Utils** — `src/utils/`
+- `Logger.ts` — Centralized logging
+- Env validation helpers
+
+### Data Flow
+
+1. Client sends MCP request → Bearer token validated by middleware
+2. MCP tool handler routes request to service
+3. Service calls `SPPClient` for SPP API access
+4. Response is parsed, validated, and returned to client
+
+## Key Conventions
+
+- **SPP API:** Always use `SPPClient`; never call SPP directly
+- **Env Vars:** Validate all critical vars before startup (see `.env.sample`)
+- **Logging:** Use `Logger` utility; do not use `console.*`
+- **Testing:** Jest + `ts-jest` preset; add tests as needed
+- **Types:** Business objects in `src/types/`; avoid modifying if auto-generated
+- **OAuth:** All clients must use OAuth2; static tokens not supported
+
+## Troubleshooting
+
+| Issue | Check |
+|-------|-------|
+| `401` on `/mcp` | Client sending valid bearer token? |
+| OAuth loops | `SPP_CALLBACK_URL` matches in SPP app config and `.env` |
+| Empty/broken XML | `SPP_NAMESPACE` and `SPP_KEY` set correctly |
+| Registration errors | `REGISTRATION_SECRET` set for public `/oauth/register` |
+
+## Client Integration
+
+See `docs/clients/` for setup guides:
+- Claude Desktop
+- OpenCode
+- Copilot CLI
+
+Each includes environment config examples.
+
+---
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
