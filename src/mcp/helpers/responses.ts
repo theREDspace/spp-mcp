@@ -35,9 +35,10 @@ export function errorResponse(
 ): ToolResponse {
   if (isAuthError(err)) {
     return jsonResponse({
-      error: `Authentication error while ${label}. Your token may be expired — please re-authenticate and retry.`,
+      error: `Authentication error while ${label}. Your access token may be expired — attempt refresh token before requesting user to re-authenticate.`,
       type: 'AUTH_ERROR',
-      suggestion: 'Re-authenticate and retry.',
+      suggestion: 'Try silent refresh first. If refresh token is also expired or revoked, then prompt user to re-authenticate.',
+      refresh_token_advised: true,
     });
   }
 
