@@ -79,9 +79,7 @@ async function startServer() {
       console.log(`[AUTH] Token proxy:            ${baseUrl}/oauth/token`);
       console.log(`[AUTH] SPP callback relay:     ${baseUrl}/callback/spp`);
       // Forwarding callback disabled (no SPP_FORWARD_CALLBACK_URL in use).
-      setInterval(() => {
-        console.log(`[DEBUG] Heartbeat: ${new Date().toISOString()}`);
-      }, 3000);
+
     });
   } catch (err) {
     console.error('[ERROR] Failed to start server:', err);
