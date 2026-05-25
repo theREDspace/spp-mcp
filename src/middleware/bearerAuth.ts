@@ -5,6 +5,16 @@ function getResourceMetadataUrl(): string {
   return `${serverUrl}/.well-known/oauth-protected-resource`;
 }
 
+function buildBearerChallenge(extra: string[] = []): string {
+  const metadataUrl = getResourceMetadataUrl();
+  const parts = [
+    'Bearer realm="spp-mcp"',
+    `resource_metadata="${metadataUrl}"`,
+    ...extra,
+  ];
+  return parts.join(', ');
+}
+
 /**
  * Bearer token authentication middleware for MCP routes.
  *
@@ -21,10 +31,7 @@ export function bearerAuthMiddleware(req: Request, res: Response, next: NextFunc
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     const metadataUrl = getResourceMetadataUrl();
-    res.set(
-      'WWW-Authenticate',
-      `Bearer realm="spp-mcp", resource_metadata="${metadataUrl}"`
-    );
+    res.set('WWW-Authenticate', buildBearerChallenge());
     res.status(401).json({
       error: 'unauthorized',
       error_description: 'Bearer token required. Fetch the resource metadata to start the OAuth flow.',
@@ -37,10 +44,7 @@ export function bearerAuthMiddleware(req: Request, res: Response, next: NextFunc
 
   if (!token) {
     const metadataUrl = getResourceMetadataUrl();
-    res.set(
-      'WWW-Authenticate',
-      `Bearer realm="spp-mcp", resource_metadata="${metadataUrl}"`
-    );
+    res.set('WWW-Authenticate', buildBearerChallenge(['error="invalid_token"']));
     res.status(401).json({
       error: 'invalid_token',
       error_description: 'Bearer token is empty.',

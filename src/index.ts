@@ -1,16 +1,22 @@
 import 'dotenv/config';
+process.on('beforeExit', (code) => { console.log('[DEBUG] beforeExit', code); });
+process.on('exit', (code) => { console.log('[DEBUG] exit', code); });
+process.on('SIGINT', () => { console.log('[DEBUG] SIGINT'); });
+process.on('SIGTERM', () => { console.log('[DEBUG] SIGTERM'); });
+process.on('uncaughtException', (err) => { console.log('[DEBUG] uncaughtException:', err); });
+process.on('unhandledRejection', (reason, p) => { console.log('[DEBUG] unhandledRejection:', reason); });
 import express, { Request, Response, NextFunction } from 'express';
 // DEBUG: Log critical SPP env vars at startup
 console.log('[DEBUG] SPP_NAMESPACE:', process.env.SPP_NAMESPACE);
 console.log('[DEBUG] SPP_KEY:', process.env.SPP_KEY);
-import healthHandler from './routes/health';
-import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
-import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
-import { callbackSppGetHandler } from './routes/callbackSpp';
-import { oauthTokenHandler } from './routes/oauthToken';
-import { oauthRegisterHandler } from './routes/oauthRegister';
-import { bearerAuthMiddleware } from './middleware/bearerAuth';
-import { initializeMcpTransport } from './mcp/transport';
+import healthHandler from './routes/health.js';
+import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown.js';
+import { oauthAuthorizeHandler } from './routes/oauthAuthorize.js';
+import { callbackSppGetHandler } from './routes/callbackSpp.js';
+import { oauthTokenHandler } from './routes/oauthToken.js';
+import { oauthRegisterHandler } from './routes/oauthRegister.js';
+import { bearerAuthMiddleware } from './middleware/bearerAuth.js';
+import { initializeMcpTransport } from './mcp/transport.js';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3030;
@@ -42,7 +48,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 // ---- Startup: init MCP transport then start listening ----
-import { validateEnvVars } from './utils/validateEnvVars';
+import { validateEnvVars } from './utils/validateEnvVars.js';
 
 async function startServer() {
   try {
@@ -73,6 +79,9 @@ async function startServer() {
       console.log(`[AUTH] Token proxy:            ${baseUrl}/oauth/token`);
       console.log(`[AUTH] SPP callback relay:     ${baseUrl}/callback/spp`);
       // Forwarding callback disabled (no SPP_FORWARD_CALLBACK_URL in use).
+      setInterval(() => {
+        console.log(`[DEBUG] Heartbeat: ${new Date().toISOString()}`);
+      }, 3000);
     });
   } catch (err) {
     console.error('[ERROR] Failed to start server:', err);

@@ -10,6 +10,11 @@ import { pendingAuthRequests } from './oauthState';
  */
 export function callbackSppGetHandler(req: Request, res: Response) {
   const state = req.query.state as string | undefined;
+  console.log('[OAUTH-RELAY] callback received', {
+    statePresent: Boolean(state),
+    codePresent: typeof req.query.code === 'string' && req.query.code.length > 0,
+    error: req.query.error || null,
+  });
 
   if (!state) {
     res.status(400).send('Missing state parameter in SPP callback.');
@@ -38,6 +43,9 @@ export function callbackSppGetHandler(req: Request, res: Response) {
   const params = new URLSearchParams(req.query as Record<string, string>);
   const redirectTo = `${clientRedirectUri}?${params.toString()}`;
 
-  console.log(`[OAUTH-RELAY] Relaying SPP callback → ${clientRedirectUri}`);
+  console.log('[OAUTH-RELAY] Relaying SPP callback', {
+    clientRedirectUri,
+    stateMatched: true,
+  });
   res.redirect(redirectTo);
 }

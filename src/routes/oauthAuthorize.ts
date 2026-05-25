@@ -34,6 +34,14 @@ export function oauthAuthorizeHandler(req: Request, res: Response) {
     pendingAuthRequests.set(state, clientRedirectUri);
   }
 
+  console.log('[OAUTH-PROXY] authorize request', {
+    statePresent: Boolean(state),
+    originalRedirectUri: clientRedirectUri || null,
+    rewrittenRedirectUri: callbackUrl,
+    hasCodeChallenge: params.has('code_challenge'),
+    clientIdPresent: Boolean(params.get('client_id')),
+  });
+
   params.set('redirect_uri', callbackUrl);
 
   // Strip PKCE — SPP does not support it for API Integration apps

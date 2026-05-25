@@ -28,6 +28,17 @@ export async function oauthTokenHandler(req: Request, res: Response) {
 
   // Clone the body and replace redirect_uri with our registered one
   const body: Record<string, string> = { ...req.body };
+  const grantType = body.grant_type || 'unknown';
+  const authMethod = req.headers.authorization ? 'client_secret_basic' : 'client_secret_post_or_public';
+  console.log('[OAUTH-TOKEN] Incoming token request', {
+    grantType,
+    authMethod,
+    hasRefreshToken: Boolean(body.refresh_token),
+    hasCode: Boolean(body.code),
+    hasRedirectUri: Boolean(body.redirect_uri),
+    hasCodeVerifier: Boolean(body.code_verifier),
+  });
+
   if (body.redirect_uri) {
     console.log(`[OAUTH-TOKEN] Replacing redirect_uri: ${body.redirect_uri} → ${callbackUrl}`);
     body.redirect_uri = callbackUrl;
@@ -57,6 +68,17 @@ export async function oauthTokenHandler(req: Request, res: Response) {
     );
 
     console.log(`[OAUTH-TOKEN] SPP responded with ${response.status}`);
+    if (response.status >= 400) {
+      console.log('[OAUTH-TOKEN] SPP error response', response.data);
+    } else {
+      console.log('[OAUTH-TOKEN] Token response shape', {
+        grantType,
+        hasAccessToken: Boolean(response.data?.access_token),
+        hasRefreshToken: Boolean(response.data?.refresh_token),
+        expiresIn: response.data?.expires_in ?? null,
+        tokenType: response.data?.token_type ?? null,
+      });
+    }
     res.status(response.status).json(response.data);
   } catch (err: any) {
     console.error('[OAUTH-TOKEN] Error proxying token request:', err.message);
