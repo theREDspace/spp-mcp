@@ -24,7 +24,6 @@ function buildInvalidTokenChallenge(): string {
  * SPPClient — the server never holds credentials itself.
  */
 async function handleWithFreshServer(req: Request, res: Response, body?: unknown) {
-  console.log('[MCP][DEBUG] mcpTools at request:', mcpTools.map(t => t.name));
   const transport = new NodeStreamableHTTPServerTransport({ enableJsonResponse: true });
 
   const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
@@ -42,7 +41,6 @@ async function handleWithFreshServer(req: Request, res: Response, body?: unknown
       }
     );
   }
-  console.log('[MCP] Registered methods:', mcpTools.map(t => t.name));
 
   await server.connect(transport);
   console.log('[MCP][DEBUG] Incoming JSON-RPC body:', body);

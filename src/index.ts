@@ -1,8 +1,5 @@
 import 'dotenv/config';
 process.on('beforeExit', (code) => { console.log('[DEBUG] beforeExit', code); });
-process.on('exit', (code) => { console.log('[DEBUG] exit', code); });
-process.on('SIGINT', () => { console.log('[DEBUG] SIGINT'); });
-process.on('SIGTERM', () => { console.log('[DEBUG] SIGTERM'); });
 process.on('uncaughtException', (err) => { console.log('[DEBUG] uncaughtException:', err); });
 process.on('unhandledRejection', (reason, p) => { console.log('[DEBUG] unhandledRejection:', reason); });
 import express, { Request, Response, NextFunction } from 'express';
