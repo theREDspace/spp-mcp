@@ -19,6 +19,55 @@ interface BOSchema {
 }
 
 export const boSchemaRegistry: Record<string, BOSchema> = {
+  BookingSummary: {
+    typeFile: 'src/types/BookingSummary.ts',
+    canonicalId: 'user_id',
+    alternateIds: ['project_id', 'id'],
+    requiredFields: [
+      'start_date', 'end_date', 'user_id', 'total_actual_hours', 'total_booked_hours', 'utilization_percentage'
+    ],
+    fields: [
+      { name: 'user_id', type: 'string', required: false },
+      { name: 'project_id', type: 'string', required: false },
+      { name: 'start_date', type: 'DateContainer', required: true },
+      { name: 'end_date', type: 'DateContainer', required: true },
+      { name: 'total_booked_hours', type: 'number', required: true },
+      { name: 'total_actual_hours', type: 'number', required: true },
+      { name: 'utilization_percentage', type: 'number', required: true },
+      { name: 'by_project', type: 'BookingProjectBreakdown[]', required: false },
+      { name: 'by_user', type: 'BookingSummary[]', required: false }
+    ],
+    filterExample: { user_id: 'U123', start_date: {Date: {year: 2026, month: 5, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC'}}, end_date: {Date: {year: 2026, month: 6, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC'}} },
+    examplePayload: {
+      user_id: 'U123',
+      start_date: {Date: {year: 2026, month: 5, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC'}},
+      end_date: {Date: {year: 2026, month: 6, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC'}},
+      total_booked_hours: 120,
+      total_actual_hours: 110,
+      utilization_percentage: 91.67,
+      by_project: [
+        { project_id: 'P111', project_name: 'Alpha', booked_hours: 50, actual_hours: 48, utilization_percentage: 96 },
+        { project_id: 'P222', project_name: 'Beta', booked_hours: 70, actual_hours: 62, utilization_percentage: 88.6 }
+      ]
+    }
+  },
+  TimeEntry: {
+    typeFile: 'src/types/TimeEntry.ts',
+    canonicalId: 'id',
+    alternateIds: ['userid', 'timesheetid', 'projectid'],
+    requiredFields: ['id', 'userid', 'date', 'hours'],
+    fields: [
+      { name: 'id', type: 'string', required: true },
+      { name: 'userid', type: 'string', required: true },
+      { name: 'date', type: 'DateContainer', required: true },
+      { name: 'hours', type: 'number', required: true },
+      { name: 'timesheetid', type: 'string', required: false },
+      { name: 'projectid', type: 'string', required: false },
+      { name: 'notes', type: 'string', required: false }
+    ],
+    filterExample: { userid: 'U321', projectid: 'P123', date: {Date: {year: 2026, month: 3, day: 10, hour: 0, minute: 0, second: 0, timezone: 'UTC'}} },
+    examplePayload: { id: 'TE42', userid: 'U321', date: {Date: {year: 2026, month: 3, day: 10, hour: 0, minute: 0, second: 0, timezone: 'UTC'}}, timesheetid: 'TS123', hours: 7.5, projectid: 'P123', notes: 'Project X kickoff' }
+  },
   Project: {
     typeFile: 'src/types/Project.ts',
     canonicalId: 'id',
