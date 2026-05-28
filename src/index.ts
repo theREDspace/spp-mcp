@@ -25,6 +25,7 @@ app.use(express.urlencoded({ extended: false }));
 // ---- Discovery endpoints (unauthenticated — RFC 9728 / MCP auth spec) ----
 app.get('/.well-known/oauth-protected-resource', oauthProtectedResourceHandler);
 app.get('/.well-known/oauth-authorization-server', oauthAuthorizationServerHandler);
+app.get('/.well-known/openid-configuration', oauthAuthorizationServerHandler);
 
 // ---- OAuth proxy routes (unauthenticated) ----
 // /oauth/authorize  — swaps client's redirect_uri with SPP_CALLBACK_URL, forwards to SPP

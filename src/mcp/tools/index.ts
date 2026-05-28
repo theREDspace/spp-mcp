@@ -15,12 +15,30 @@ import updateTimeEntry from './updateTimeEntry';
 import deleteTimeEntry from './deleteTimeEntry';
 import submitTimesheet from './submitTimesheet';
 import cloneTimesheet from './cloneTimesheet';
+import genericRead from './genericRead';
+import genericList from './genericList';
+import genericBatchList from './genericBatchList';
+import genericAdd from './genericAdd';
+import genericUpdate from './genericUpdate';
+import genericDelete from './genericDelete';
+import listObjectTypes from './listObjectTypes';
+import describeObjectType from './describeObjectType';
 import type { Tool } from './types';
 
 export const mcpTools: Tool[] = [
   // Discovery
   searchProjects,
   searchUsers,
+  // Generic BO CRUD Discovery
+  listObjectTypes,
+  describeObjectType,
+  // Generic BO CRUD
+  genericRead,
+  genericList,
+  genericBatchList,
+  genericAdd,
+  genericUpdate,
+  genericDelete,
   // Projects
   listProjects,
   getProject,
