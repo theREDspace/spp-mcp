@@ -19,6 +19,7 @@ const genericList: Tool = {
     { objectType, filter = {}, limit = 100, offset = 0 }: { objectType: string; filter?: Record<string, any>; limit?: number; offset?: number },
     { sppClient }: { sppClient: SPPClient }
   ) => {
+    console.log("[genericList] objectType:", objectType);
     if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
     const { normalizeAndValidateBOInput } = await import('../../utils/normalizeAndValidateBOInput');
     const normFilter = normalizeAndValidateBOInput(objectType, filter, 'filter');
