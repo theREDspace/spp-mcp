@@ -5,6 +5,8 @@ import { AgreementToProject } from "../types/Agreement_to_project.js";
 export type BOName =
   | "Customerpo"
   | "Invoice"
+  | "BookingSummary"
+  | "TimeEntry"
   | "Project"
   | "Slip"
   | "Timesheet"
@@ -167,8 +169,13 @@ export type Wrapper<T extends BOName> = {
 };
 
 // Override mapping for Agreement_to_project
+import { BookingSummary } from "../types/BookingSummary";
+import { TimeEntry } from "../types/TimeEntry";
+
 export interface ExplicitBORecordMap {
   Agreement_to_project: AgreementToProject;
+  BookingSummary: BookingSummary;
+  TimeEntry: TimeEntry;
 }
 
 export type BORecordMap = ExplicitBORecordMap & {

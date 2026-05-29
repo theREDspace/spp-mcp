@@ -13,6 +13,8 @@ export * from './Booking.js';
 export * from './BookingByDay.js';
 export * from './BookingRequest.js';
 export * from './BookingType.js';
+export * from './BookingSummary.js';
+export * from './TimeEntry.js';
 export * from './Budget.js';
 export * from './BudgetAllocation.js';
 export * from './Category.js';

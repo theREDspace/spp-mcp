@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
-import { mcpTools } from './tools';
+import { mcpTools } from './tools/index';
+import SPPClient from '../clients/SPPClient';
+// Provide SPPClient for tool context injection
 
 function getResourceMetadataUrl(): string {
   const serverUrl = (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, '');
@@ -34,16 +36,18 @@ async function handleWithFreshServer(req: Request, res: Response, body?: unknown
     server.registerTool(
       tool.name,
       { title: tool.name, description: tool.description, inputSchema: tool.inputSchema },
-      (input, context) => {
-        console.log(`[MCP][Tool=${tool.name}] Invoked`);
-        const ctxWithToken = { ...context, token };
-        return tool.handler(input, ctxWithToken);
-      }
+       (input, context) => {
+         console.log(`[MCP][Tool=${tool.name}] Invoked`);
+         // Inject sppClient using the current Bearer token
+         const sppClient = new SPPClient({ accessToken: token });
+         const ctxWithToken = { ...context, token, sppClient };
+         return tool.handler(input, ctxWithToken);
+       }
     );
   }
 
   await server.connect(transport);
-  console.log('[MCP][DEBUG] Incoming JSON-RPC body:', body);
+  console.log('[MCP][DEBUG] Incoming JSON-RPC body:', JSON.stringify(body));
   await transport.handleRequest(req, res, body);
 }
 
