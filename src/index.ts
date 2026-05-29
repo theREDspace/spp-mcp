@@ -6,14 +6,14 @@ import express, { Request, Response, NextFunction } from 'express';
 // DEBUG: Log critical SPP env vars at startup
 console.log('[DEBUG] SPP_NAMESPACE:', process.env.SPP_NAMESPACE);
 console.log('[DEBUG] SPP_KEY:', process.env.SPP_KEY);
-import healthHandler from './routes/health.js';
-import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown.js';
-import { oauthAuthorizeHandler } from './routes/oauthAuthorize.js';
-import { callbackSppGetHandler } from './routes/callbackSpp.js';
-import { oauthTokenHandler } from './routes/oauthToken.js';
-import { oauthRegisterHandler } from './routes/oauthRegister.js';
-import { bearerAuthMiddleware } from './middleware/bearerAuth.js';
-import { initializeMcpTransport } from './mcp/transport.js';
+import healthHandler from './routes/health';
+import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
+import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
+import { callbackSppGetHandler } from './routes/callbackSpp';
+import { oauthTokenHandler } from './routes/oauthToken';
+import { oauthRegisterHandler } from './routes/oauthRegister';
+import { bearerAuthMiddleware } from './middleware/bearerAuth';
+import { initializeMcpTransport } from './mcp/transport';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3030;
@@ -38,6 +38,11 @@ app.post('/oauth/register', oauthRegisterHandler);
 
 // ---- Health (unauthenticated) ----
 app.get('/health', healthHandler);
+// ---- Tool & object registry (out-of-band LLM discovery, unauthenticated) ----
+import toolsDescribeHandler from './routes/toolsDescribe';
+import toolsInvokeHandler from './routes/toolsInvoke';
+app.get('/tools/describe', toolsDescribeHandler);
+app.post('/tools/:toolName', toolsInvokeHandler);
 
 // ---- Simple error handler middleware ----
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

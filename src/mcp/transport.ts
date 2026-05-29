@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
-import { mcpTools } from './tools';
+import { mcpTools } from './tools/index';
 import SPPClient from '../clients/SPPClient';
 // Provide SPPClient for tool context injection
 
@@ -47,7 +47,7 @@ async function handleWithFreshServer(req: Request, res: Response, body?: unknown
   }
 
   await server.connect(transport);
-  console.log('[MCP][DEBUG] Incoming JSON-RPC body:', body);
+  console.log('[MCP][DEBUG] Incoming JSON-RPC body:', JSON.stringify(body));
   await transport.handleRequest(req, res, body);
 }
 
