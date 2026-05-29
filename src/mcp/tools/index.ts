@@ -9,6 +9,8 @@ import describeObjectType from './describeObjectType';
 import echo from './echo';
 import type { Tool } from './types';
 
+import whoami from './whoami';
+
 export const mcpTools: Tool[] = [
   // Generic BO CRUD Discovery
   listObjectTypes,
@@ -22,4 +24,5 @@ export const mcpTools: Tool[] = [
   genericDelete,
   // Utility/debug
   echo,
+  whoami,
 ];
