@@ -7,9 +7,10 @@ import genericDelete from './genericDelete';
 import listObjectTypes from './listObjectTypes';
 import describeObjectType from './describeObjectType';
 import echo from './echo';
+import whoami from './whoami';
 import type { Tool } from './types';
 
-import whoami from './whoami';
+const isProd = process.env.NODE_ENV === 'production';
 
 export const mcpTools: Tool[] = [
   // Generic BO CRUD Discovery
@@ -22,7 +23,8 @@ export const mcpTools: Tool[] = [
   genericAdd,
   genericUpdate,
   genericDelete,
-  // Utility/debug
-  echo,
+  // Utility
   whoami,
+  // Debug-only — excluded in production
+  ...(isProd ? [] : [echo]),
 ];

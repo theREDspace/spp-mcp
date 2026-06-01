@@ -54,5 +54,7 @@ export function bearerAuthMiddleware(req: Request, res: Response, next: NextFunc
   }
 
   (req as any).bearerToken = token;
+  // Also set on the typed extension declared in src/types/express.d.ts
+  req.bearerToken = token;
   next();
 }

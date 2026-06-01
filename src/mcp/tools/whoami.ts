@@ -17,19 +17,20 @@ const whoami: Tool = {
         ]
       };
     }
-    // console.log('whoami user info:', user);
-    // const resp = {
-    //   id: user.id || null,
-    //   name: user.name || `${user.addr?.first || ''} ${user.addr?.last || ''}`.trim(),
-    //   email: user.addr?.email || null,
-    //   manager_id: user.line_managerid || null,
-    //   department_id: user.departmentid || null,
-    //   nickname: user.nickname || null,
-    //   active: user.active,
-    // };
+    // Narrowed projection — avoid leaking the full User record (custom fields,
+    // SSN-like identifiers, etc.). Callers can fetch more via generic_read.
+    const projected = {
+      id: user.id ?? null,
+      name: user.name || `${(user as any).addr?.first || ''} ${(user as any).addr?.last || ''}`.trim() || null,
+      email: (user as any).addr?.email || null,
+      manager_id: (user as any).line_managerid || null,
+      department_id: (user as any).departmentid || null,
+      nickname: (user as any).nickname || null,
+      active: (user as any).active ?? null,
+    };
     return {
       content: [
-        { type: 'text', text: JSON.stringify(user, null, 2) }
+        { type: 'text', text: JSON.stringify(projected, null, 2) }
       ]
     };
   },

@@ -2,6 +2,8 @@ import type { Tool } from './types';
 import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
+import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
+import type { BOName } from '../../services/BORecordMap';
 
 import { z } from 'zod';
 
@@ -15,7 +17,7 @@ const inputSchema = z.object({
 });
 
 const genericBatchList: Tool = {
-  name: 'generic_batchList',
+  name: 'generic_batch_list',
   description: 'Batch list/query objects (multiple filter objects) for any BO',
   inputSchema,
   handler: async (
@@ -25,7 +27,7 @@ const genericBatchList: Tool = {
     if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
     // USER CONTEXT GUARD
     let patchedFilters = Array.isArray(filter) ? [...filter] : [];
-    if (USER_BOUND_OBJECTS.includes(objectType as any)) {
+    if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
         // If no filters were provided, seed with an empty object so the user context
         // is still applied (e.g. preferSelf=true with no other filter criteria).
@@ -38,9 +40,8 @@ const genericBatchList: Tool = {
         return { content: [{ type: 'text', text: `User context resolution error: ${(e as Error).message}` }] };
       }
     }
-    const { normalizeAndValidateBOInput } = await import('../../utils/normalizeAndValidateBOInput');
     const normFilters = patchedFilters.map(f => normalizeAndValidateBOInput(objectType, f, 'filter'));
-    const result = await sppClient.batchList(objectType as any, normFilters, limit, offset);
+    const result = await sppClient.batchList(objectType as BOName, normFilters, limit, offset);
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   },
 };

@@ -1,6 +1,8 @@
 import type { Tool } from './types';
 import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
+import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
+import type { BOName } from '../../services/BORecordMap';
 
 import { z } from 'zod';
 
@@ -19,9 +21,8 @@ const genericUpdate: Tool = {
     { sppClient }: { sppClient: SPPClient }
   ) => {
     if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
-    const { normalizeAndValidateBOInput } = await import('../../utils/normalizeAndValidateBOInput');
     const normChanges = normalizeAndValidateBOInput(objectType, changes, 'changes');
-    const result = await sppClient.update(objectType as any, id, normChanges);
+    const result = await sppClient.update(objectType as BOName, id, normChanges);
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   },
 };
