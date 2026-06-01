@@ -169,9 +169,10 @@ class SPPClient {
 
   read<BO extends keyof BORecordMap>(
     bo: BO,
-    id: string
+    id: string,
+    idField: string = 'id'
   ): Promise<BORecordMap[BO] | undefined> {
-    return new BOService(this).read(bo, id);
+    return new BOService(this).read(bo, id, idField);
   }
 
   add<BO extends keyof BORecordMap>(

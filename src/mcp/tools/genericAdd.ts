@@ -2,6 +2,8 @@ import type { Tool } from './types';
 import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
+import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
+import type { BOName } from '../../services/BORecordMap';
 
 import { z } from 'zod';
 
@@ -23,7 +25,7 @@ const genericAdd: Tool = {
     if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
     // USER CONTEXT GUARD
     let patchedPayload = { ...payload };
-    if (USER_BOUND_OBJECTS.includes(objectType as any)) {
+    if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
         const { userId, userField } = await resolveUserContext({ objectType, payloadOrFilter: payload, sppClient, preferSelf, userName });
         patchedPayload[userField] = userId;
@@ -31,9 +33,8 @@ const genericAdd: Tool = {
         return { content: [{ type: 'text', text: `User context resolution error: ${(e as Error).message}` }] };
       }
     }
-    const { normalizeAndValidateBOInput } = await import('../../utils/normalizeAndValidateBOInput');
     const normPayload = normalizeAndValidateBOInput(objectType, patchedPayload, 'payload');
-    const result = await sppClient.add(objectType as any, normPayload);
+    const result = await sppClient.add(objectType as BOName, normPayload);
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   },
 };

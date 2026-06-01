@@ -2,6 +2,9 @@ import type { Tool } from './types';
 import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
+import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
+import { semanticPatterns } from '../../services/semanticPatternsRegistry';
+import type { BOName } from '../../services/BORecordMap';
 
 import { z } from 'zod';
 
@@ -26,7 +29,7 @@ const genericList: Tool = {
     if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
     // --- USER CONTEXT GUARD: if this BO requires a user, auto-resolve if needed ---
     let patchedFilter = { ...filter };
-    if (USER_BOUND_OBJECTS.includes(objectType as any)) {
+    if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
         const { userId, userField } = await resolveUserContext({ objectType, payloadOrFilter: filter, sppClient, preferSelf, userName });
         patchedFilter[userField] = userId;
@@ -34,13 +37,11 @@ const genericList: Tool = {
         return { content: [{ type: 'text', text: `User context resolution error: ${(e as Error).message}` }] };
       }
     }
-    const { normalizeAndValidateBOInput } = await import('../../utils/normalizeAndValidateBOInput');
     let normFilter;
     try {
       normFilter = normalizeAndValidateBOInput(objectType, patchedFilter, 'filter');
     } catch (validationErr) {
       // Enhance error with semantic pattern help if relevant
-      const { semanticPatterns } = await import('../../services/semanticPatternsRegistry');
       // Heuristic: if attempted filter contains a key not in any registered field, suggest
       const allFields = (boSchemaRegistry[objectType]?.fields ?? []).map(f => f.name);
       const badFields = Object.keys(filter).filter(k => !allFields.includes(k));
@@ -61,7 +62,7 @@ const genericList: Tool = {
       };
       return { content: [{ type: 'text', text: JSON.stringify(errorResp) }] };
     }
-    const result = await sppClient.list(objectType as any, normFilter, limit, offset);
+    const result = await sppClient.list(objectType as BOName, normFilter, limit, offset);
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   },
 };

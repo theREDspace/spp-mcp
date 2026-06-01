@@ -3,7 +3,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import { mcpTools } from './tools/index';
 import SPPClient from '../clients/SPPClient';
-// Provide SPPClient for tool context injection
+import { SERVER_NAME, SERVER_VERSION } from './identity';
 
 function getResourceMetadataUrl(): string {
   const serverUrl = (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, '');
@@ -28,9 +28,9 @@ function buildInvalidTokenChallenge(): string {
 async function handleWithFreshServer(req: Request, res: Response, body?: unknown) {
   const transport = new NodeStreamableHTTPServerTransport({ enableJsonResponse: true });
 
-  const server = new McpServer({ name: 'spp-mcp', version: '2.0.0' });
+  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
-  const token = (req as any).bearerToken as string;
+  const token = req.bearerToken as string;
 
   for (const tool of mcpTools) {
     server.registerTool(

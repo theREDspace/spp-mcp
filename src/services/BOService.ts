@@ -85,9 +85,10 @@ export class BOService {
 
   async read<BO extends keyof BORecordMap>(
     bo: BO,
-    id: string
+    id: string,
+    idField: string = 'id'
   ): Promise<BORecordMap[BO] | undefined> {
-    const results = await this.list(bo, { id }, 1, 0);
+    const results = await this.list(bo, { [idField]: id }, 1, 0);
     return results[0];
   }
 
