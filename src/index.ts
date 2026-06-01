@@ -1,11 +1,14 @@
 import 'dotenv/config';
-process.on('beforeExit', (code) => { console.log('[DEBUG] beforeExit', code); });
-process.on('uncaughtException', (err) => { console.log('[DEBUG] uncaughtException:', err); });
-process.on('unhandledRejection', (reason, p) => { console.log('[DEBUG] unhandledRejection:', reason); });
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException:', err);
+  // Exit so a supervisor (systemd, pm2, docker) can restart the process cleanly.
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection:', reason);
+  process.exit(1);
+});
 import express, { Request, Response, NextFunction } from 'express';
-// DEBUG: Log critical SPP env vars at startup
-console.log('[DEBUG] SPP_NAMESPACE:', process.env.SPP_NAMESPACE);
-console.log('[DEBUG] SPP_KEY:', process.env.SPP_KEY);
 import healthHandler from './routes/health';
 import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
 import { oauthAuthorizeHandler } from './routes/oauthAuthorize';
@@ -38,17 +41,6 @@ app.post('/oauth/register', oauthRegisterHandler);
 
 // ---- Health (unauthenticated) ----
 app.get('/health', healthHandler);
-// ---- Tool & object registry (out-of-band LLM discovery, unauthenticated) ----
-import toolsDescribeHandler from './routes/toolsDescribe';
-import toolsInvokeHandler from './routes/toolsInvoke';
-app.get('/tools/describe', toolsDescribeHandler);
-app.post('/tools/:toolName', toolsInvokeHandler);
-
-// ---- Simple error handler middleware ----
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  console.error(err.stack || err.message);
-  res.status(500).json({ error: 'Internal Server Error' });
-});
 
 // ---- Startup: init MCP transport then start listening ----
 import { validateEnvVars } from './utils/validateEnvVars.js';
@@ -67,10 +59,17 @@ async function startServer() {
 
     const mcpRouter = await initializeMcpTransport();
 
-    // Bearer auth applied to all /mcp routes
+    // Bearer auth applied to all /mcp routes (express normalizes trailing slash)
     app.use('/mcp', bearerAuthMiddleware, mcpRouter);
-    app.use('/mcp/', bearerAuthMiddleware, mcpRouter);
     console.log('[MCP] Server mounted at /mcp');
+
+    // ---- Error handler middleware (registered last so it catches all routes) ----
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      console.error(err.stack || err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
 
     app.listen(PORT, () => {
       const baseUrl = (process.env.APP_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');

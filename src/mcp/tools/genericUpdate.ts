@@ -23,8 +23,6 @@ const genericUpdate: Tool = {
     const normChanges = normalizeAndValidateBOInput(objectType, changes, 'changes');
     const result = await sppClient.update(objectType as any, id, normChanges);
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-
   },
 };
 export default genericUpdate;
-

@@ -31,7 +31,13 @@ export function oauthAuthorizeHandler(req: Request, res: Response) {
   const clientRedirectUri = params.get('redirect_uri');
   const state = params.get('state');
   if (state && clientRedirectUri) {
-    pendingAuthRequests.set(state, clientRedirectUri);
+    pendingAuthRequests.set(state, {
+      clientRedirectUri,
+      codeChallenge: params.get('code_challenge') || undefined,
+      codeChallengeMethod: (params.get('code_challenge_method') as 'S256' | 'plain' | null) || undefined,
+      clientId: params.get('client_id') || undefined,
+      createdAt: Date.now(),
+    });
   }
 
   console.log('[OAUTH-PROXY] authorize request', {
