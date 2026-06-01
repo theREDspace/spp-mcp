@@ -21,8 +21,8 @@ export function callbackSppGetHandler(req: Request, res: Response) {
     return;
   }
 
-  const clientRedirectUri = pendingAuthRequests.get(state);
-  if (!clientRedirectUri) {
+  const entry = pendingAuthRequests.get(state);
+  if (!entry) {
     // Fallback to env var if state not found (e.g. server restarted mid-flow)
     const fallback = (process.env.SPP_FORWARD_CALLBACK_URL || '').replace(/\/$/, '');
     if (!fallback) {
@@ -37,8 +37,9 @@ export function callbackSppGetHandler(req: Request, res: Response) {
     return;
   }
 
-  // Clean up
-  pendingAuthRequests.delete(state);
+  const clientRedirectUri = entry.clientRedirectUri;
+  // Note: we DON'T delete the entry yet — /oauth/token still needs the PKCE challenge
+  // to validate the code_verifier. Entry will be evicted by TTL.
 
   const params = new URLSearchParams(req.query as Record<string, string>);
   const redirectTo = `${clientRedirectUri}?${params.toString()}`;

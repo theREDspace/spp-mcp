@@ -47,7 +47,6 @@ async function handleWithFreshServer(req: Request, res: Response, body?: unknown
   }
 
   await server.connect(transport);
-  console.log('[MCP][DEBUG] Incoming JSON-RPC body:', JSON.stringify(body));
   await transport.handleRequest(req, res, body);
 }
 
