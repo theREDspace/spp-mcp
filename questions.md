@@ -1,6 +1,18 @@
 # Redspace SPP MCP Server — Answerable Questions
 
-A complete map of user questions to the MCP tools the client invokes.
+A map of user questions to the generic MCP tools the agent invokes.
+
+All reads go through `generic_list` / `generic_read`, writes through `generic_add` / `generic_update` / `generic_delete`.  
+Use `describe_object_type` or `list_object_types` when the agent needs to discover fields before acting.
+
+---
+
+## 🙋 Identity
+
+| User Question | Tool(s) Called |
+|---|---|
+| "Who am I?" / "What's my user info?" | `whoami()` |
+| "What's my name / email / manager?" | `whoami()` |
 
 ---
 
@@ -8,15 +20,13 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tool(s) Called |
 |---|---|
-| "Find the project called Acme Redesign" | `search_projects(query: "Acme Redesign")` |
-| "What projects do we have with code NS-2024?" | `search_projects(query: "NS-2024")` |
-| "List all active projects" | `list_projects(active_only: true)` |
-| "Show me all projects (including archived)" | `list_projects(active_only: false)` |
-| "What's the budget for project X?" | `get_project(project_id: "...")` |
-| "When does the ABC project start and end?" | `get_project(project_id: "...")` |
-| "What's the status/stage of project X?" | `get_project(project_id: "...")` |
-| "Who is the customer for project X?" | `get_project(project_id: "...")` |
-| "What are the billing details of project X?" | `get_project(project_id: "...")` |
+| "Find the project called Acme Redesign" | `generic_list(objectType: "Project", filter: { name: "Acme Redesign" })` |
+| "What projects do we have with code NS-2024?" | `generic_list(objectType: "Project", filter: { code: "NS-2024" })` |
+| "List all active projects" | `generic_list(objectType: "Project", filter: { active: true })` |
+| "Show me all projects (including archived)" | `generic_list(objectType: "Project")` |
+| "What's the budget / status / dates for project X?" | `generic_read(objectType: "Project", id: "...")` |
+| "Who is the customer for project X?" | `generic_read(objectType: "Project", id: "...")` → inspect `customer` field |
+| "What are the billing details of project X?" | `generic_read(objectType: "Project", id: "...")` |
 
 ---
 
@@ -24,12 +34,12 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tool(s) Called |
 |---|---|
-| "Find a user named John Smith" | `search_users(query: "John Smith")` |
-| "What's my profile information?" | `get_user()` (no user_id = self) |
-| "Show me Jane Doe's user profile" | `search_users(query: "Jane Doe")` → `get_user(user_id: "...")` |
-| "Who is assigned to project X?" | `list_project_assignments(project_id: "...")` |
-| "What is the allocation percentage for people on project X?" | `list_project_assignments(project_id: "...")` |
-| "Are there any inactive assignments on project X?" | `list_project_assignments(project_id: "...", include_inactive: true)` |
+| "Find a user named John Smith" | `generic_list(objectType: "User", filter: { name: "John Smith" })` |
+| "What's my profile information?" | `whoami()` |
+| "Show me Jane Doe's user profile" | `generic_list(objectType: "User", filter: { name: "Jane Doe" })` → `generic_read(objectType: "User", id: "...")` |
+| "Who is assigned to project X?" | `generic_list(objectType: "ResourceProfile", filter: { projectid: "..." })` |
+| "What is the allocation percentage for people on project X?" | `generic_list(objectType: "ResourceProfile", filter: { projectid: "..." })` → inspect `allocation` field |
+| "Show resource profile details for a specific assignment" | `generic_read(objectType: "ResourceProfile", id: "...")` |
 
 ---
 
@@ -37,21 +47,18 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tool(s) Called |
 |---|---|
-| "What did I log this week?" | `list_time_entries(week_offset: 0)` |
-| "Show my time entries from last week" | `list_time_entries(week_offset: 1)` |
-| "How many hours did I log on project X this month?" | `list_time_entries(project_id: "...", start_date: "...", end_date: "...")` |
-| "What did user Y work on between Jan 1-15?" | `list_time_entries(user_id: "...", start_date: "...", end_date: "...")` |
-| "Show my most recent timesheet" | `get_timesheet()` (no ID = most recent) |
-| "What's the status of timesheet #123?" | `get_timesheet(timesheet_id: "123")` |
-| "List all my submitted timesheets" | `list_timesheets(status: "submitted")` |
-| "Show my rejected timesheets from Q1 2026" | `list_timesheets(status: "rejected", start_date: "2026-01-01", end_date: "2026-03-31")` |
-| "How many hours total on my latest timesheet?" | `get_timesheet()` → inspect `total` field |
-| "Show detailed breakdown by project/task for my timesheet" | `get_timesheet(timesheet_id: "...")` |
-| "Log 8h per day for ProjectX, week of May 11" | `add_time_entry(entries=[{date: '2026-05-11', hours: 8}, ...])` (all entries must be from the same week) |
-| "Update yesterday's time entry to 6.5h" | `update_time_entry(entry_id: "...", hours: 6.5)` |
-| "Delete these 3 entries I accidentally logged" | `delete_time_entry(entry_ids: ["...", "...", "..."])` (all entries must be from the same week/timesheet) |
-| "Submit my timesheet for this week" | `submit_timesheet(timesheet_id: "...")` |
-| "Copy last week's timesheet (but exclude holiday Monday)" | `clone_timesheet(source_timesheet_id: "...", exclude_days: ["2026-05-18"])` |
+| "What did I log this week?" | `generic_list(objectType: "TimeEntry", filter: { ..current week dates.. }, preferSelf: true)` |
+| "Show my time entries from last week" | `generic_list(objectType: "TimeEntry", filter: { ..last week dates.. }, preferSelf: true)` |
+| "How many hours did I log on project X this month?" | `generic_list(objectType: "TimeEntry", filter: { projectid: "...", ..date range.. })` |
+| "What did user Y work on between Jan 1–15?" | `generic_list(objectType: "TimeEntry", filter: { userid: "...", startdate: "2026-01-01", enddate: "2026-01-15" })` |
+| "Show my most recent timesheet" | `generic_list(objectType: "Timesheet", preferSelf: true)` → pick most recent |
+| "What's the status of timesheet #123?" | `generic_read(objectType: "Timesheet", id: "123")` |
+| "List all my submitted timesheets" | `generic_list(objectType: "Timesheet", filter: { status: "submitted" }, preferSelf: true)` |
+| "Show my rejected timesheets from Q1 2026" | `generic_list(objectType: "Timesheet", filter: { status: "rejected", startdate: "2026-01-01", enddate: "2026-03-31" }, preferSelf: true)` |
+| "Log 8 hours on project X for today" | `generic_add(objectType: "TimeEntry", payload: { projectid: "...", date: "...", hours: 8, ... })` |
+| "Update yesterday's time entry to 6.5 h" | `generic_update(objectType: "TimeEntry", id: "...", changes: { hours: 6.5 })` |
+| "Delete this time entry" | `generic_delete(objectType: "TimeEntry", id: "...")` |
+| "Submit my timesheet" | `generic_update(objectType: "Timesheet", id: "...", changes: { status: "submitted" })` |
 
 ---
 
@@ -59,13 +66,12 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tool(s) Called |
 |---|---|
-| "What am I booked on next week?" | `list_bookings(start_date: "...", end_date: "...")` |
-| "Who is booked on project X?" | `list_bookings(project_id: "...")` |
-| "Show all bookings for user Y in June" | `list_bookings(user_id: "...", start_date: "2026-06-01", end_date: "2026-06-30")` |
-| "Am I over- or under-utilized this month?" | `get_booking_summary(start_date: "...", end_date: "...")` |
-| "Compare my booked vs actual hours for Q1" | `get_booking_summary(start_date: "2026-01-01", end_date: "2026-03-31")` |
-| "What's my utilization percentage this quarter?" | `get_booking_summary(start_date: "...", end_date: "...")` |
-| "Which projects am I over/under on booked hours?" | `get_booking_summary(...)` → inspect `by_project` array |
+| "What am I booked on next week?" | `generic_list(objectType: "Booking", filter: { ..next week dates.. }, preferSelf: true)` |
+| "Who is booked on project X?" | `generic_list(objectType: "Booking", filter: { projectid: "..." })` |
+| "Show all bookings for user Y in June" | `generic_list(objectType: "Booking", filter: { userid: "...", startdate: "2026-06-01", enddate: "2026-06-30" })` |
+| "Am I over- or under-utilized this month?" | `generic_list(objectType: "BookingSummary", filter: { ..current month.. }, preferSelf: true)` |
+| "Compare my booked vs actual hours for Q1" | `generic_list(objectType: "BookingSummary", filter: { startdate: "2026-01-01", enddate: "2026-03-31" }, preferSelf: true)` |
+| "What's my utilization percentage this quarter?" | `generic_list(objectType: "BookingSummary", filter: { ..quarter dates.. }, preferSelf: true)` |
 
 ---
 
@@ -73,11 +79,31 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tool(s) Called |
 |---|---|
-| "What tasks are on project X?" | `list_project_tasks(project_id: "...")` |
-| "Show all tasks including completed ones" | `list_project_tasks(project_id: "...", active_only: false)` |
-| "What milestones are defined for project X?" | `list_project_tasks(project_id: "...")` → filter by `classification: 'milestone'` |
-| "What's the completion percentage on tasks for project X?" | `list_project_tasks(project_id: "...")` → inspect `percent_complete` |
-| "Which tasks are billable on project X?" | `list_project_tasks(project_id: "...")` → inspect `is_billable` |
+| "What tasks are on project X?" | `generic_list(objectType: "Task", filter: { projectid: "..." })` |
+| "Show all tasks including completed ones" | `generic_list(objectType: "Task", filter: { projectid: "...", active: false })` |
+| "What milestones are defined for project X?" | `generic_list(objectType: "Task", filter: { projectid: "..." })` → filter by `classification: 'milestone'` |
+| "What's the completion percentage on tasks for project X?" | `generic_list(objectType: "Task", filter: { projectid: "..." })` → inspect `percentcomplete` |
+| "Which tasks are billable on project X?" | `generic_list(objectType: "Task", filter: { projectid: "..." })` → inspect `isbillable` |
+
+---
+
+## 🧾 Invoices & Slips
+
+| User Question | Tool(s) Called |
+|---|---|
+| "Show invoices for project X" | `generic_list(objectType: "Invoice", filter: { projectid: "..." })` |
+| "What's the status of invoice #456?" | `generic_read(objectType: "Invoice", id: "456")` |
+| "List all open slips for project X" | `generic_list(objectType: "Slip", filter: { projectid: "...", status: "open" })` |
+
+---
+
+## 🔎 Schema Discovery
+
+| User Question | Tool(s) Called |
+|---|---|
+| "What object types are available?" | `list_object_types()` |
+| "What fields does a TimeEntry have?" | `describe_object_type(objectType: "TimeEntry")` |
+| "What are required fields to create a Project?" | `describe_object_type(objectType: "Project")` |
 
 ---
 
@@ -85,6 +111,7 @@ A complete map of user questions to the MCP tools the client invokes.
 
 | User Question | Tools Called (in sequence) |
 |---|---|
-| "How much time has the team logged on Project Alpha?" | `search_projects(query: "Alpha")` → `list_project_assignments(project_id)` → `list_time_entries(user_id, project_id)` per user |
-| "Is anyone on my project under-utilized?" | `search_projects(...)` → `list_project_assignments(...)` → `get_booking_summary(user_id, ...)` per assignee |
-| "What projects is John working on and how's his timesheet?" | `search_users(query: "John")` → `list_bookings(user_id)` + `list_timesheets(user_id)` |
+| "How much time has the team logged on Project Alpha?" | `generic_list(Project, filter: name)` → `generic_list(ResourceProfile, filter: projectid)` → `generic_batch_list(TimeEntry, filter: [per user+project])` |
+| "Is anyone on my project under-utilized?" | find project → `generic_list(ResourceProfile, ...)` → `generic_list(BookingSummary, ...)` per assignee |
+| "What projects is John working on and how's his timesheet?" | `generic_list(User, ...)` → `generic_list(Booking, filter: userid)` + `generic_list(Timesheet, filter: userid)` |
+| "Add a time entry to the same task as last week" | `generic_list(TimeEntry, ..last week..)` → extract taskid/projectid → `generic_add(TimeEntry, ...)` |

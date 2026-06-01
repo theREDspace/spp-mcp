@@ -25,10 +25,6 @@ Example `opencode` config:
     "redspace-spp": {
       "type": "remote",
       "url": "https://your-ngrok-domain/mcp",
-      "oauth": {
-        "clientId": "some-id",
-        "clientSecret": "some-secret"
-      },
       "enabled": true,
       "headers": {
         "ngrok-skip-browser-warning": "true"
@@ -38,10 +34,7 @@ Example `opencode` config:
 }
 ```
 
-Depending on your OpenCode version, you can either:
-
-- add the remote URL directly
-- or launch it through an MCP bridge such as `mcp-remote`
+OpenCode handles OAuth natively — no `clientId`/`clientSecret` needed in the config file. When a tool call requires auth, OpenCode will prompt you through the browser flow automatically.
 
 ## Notes
 
