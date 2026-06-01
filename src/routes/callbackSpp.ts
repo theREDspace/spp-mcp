@@ -1,18 +1,24 @@
 import { Request, Response } from 'express';
-import { pendingAuthRequests } from './oauthState';
+import { pendingAuthRequests, codeBindings } from './oauthState';
 
 /**
  * GET /callback/spp
  *
- * Authorization code relay: SPP redirects here after the user authenticates.
- * We look up the client's original redirect_uri (stored during /oauth/authorize)
- * using the `state` param, then forward all query params there.
+ * SPP redirects here with `code` + `state` after the user authenticates.
+ * We:
+ *  1. Look up the pending entry by `state` to recover the client's redirect_uri
+ *     and PKCE challenge.
+ *  2. Bind `code → { codeChallenge, proxyClientId }` so /oauth/token can
+ *     validate the verifier when the client exchanges the code.
+ *  3. Relay all query params back to the client's original redirect_uri.
  */
 export function callbackSppGetHandler(req: Request, res: Response) {
   const state = req.query.state as string | undefined;
+  const code = req.query.code as string | undefined;
+
   console.log('[OAUTH-RELAY] callback received', {
     statePresent: Boolean(state),
-    codePresent: typeof req.query.code === 'string' && req.query.code.length > 0,
+    codePresent: Boolean(code),
     error: req.query.error || null,
   });
 
@@ -23,12 +29,11 @@ export function callbackSppGetHandler(req: Request, res: Response) {
 
   const entry = pendingAuthRequests.get(state);
   if (!entry) {
-    // Fallback to env var if state not found (e.g. server restarted mid-flow)
     const fallback = (process.env.SPP_FORWARD_CALLBACK_URL || '').replace(/\/$/, '');
     if (!fallback) {
-      res.status(400).send(
-        'Could not determine client redirect URI. State not found and SPP_FORWARD_CALLBACK_URL not set.'
-      );
+      res
+        .status(400)
+        .send('Could not determine client redirect URI. State not found and SPP_FORWARD_CALLBACK_URL not set.');
       return;
     }
     const params = new URLSearchParams(req.query as Record<string, string>);
@@ -37,16 +42,20 @@ export function callbackSppGetHandler(req: Request, res: Response) {
     return;
   }
 
-  const clientRedirectUri = entry.clientRedirectUri;
-  // Note: we DON'T delete the entry yet — /oauth/token still needs the PKCE challenge
-  // to validate the code_verifier. Entry will be evicted by TTL.
+  // Bind code → PKCE/client info for /oauth/token to consume.
+  if (code) {
+    const binding: import('./oauthState').CodeBinding = {
+      clientRedirectUri: entry.clientRedirectUri,
+      createdAt: Date.now(),
+      ...(entry.codeChallenge !== undefined ? { codeChallenge: entry.codeChallenge } : {}),
+      ...(entry.codeChallengeMethod !== undefined ? { codeChallengeMethod: entry.codeChallengeMethod } : {}),
+      ...(entry.clientId !== undefined ? { proxyClientId: entry.clientId } : {}),
+    };
+    codeBindings.set(code, binding);
+  }
+  // Don't delete pending entry — TTL will clean it up; state may be replayed
+  // by the client before code exchange in some flows.
 
   const params = new URLSearchParams(req.query as Record<string, string>);
-  const redirectTo = `${clientRedirectUri}?${params.toString()}`;
-
-  console.log('[OAUTH-RELAY] Relaying SPP callback', {
-    clientRedirectUri,
-    stateMatched: true,
-  });
-  res.redirect(redirectTo);
+  res.redirect(`${entry.clientRedirectUri}?${params.toString()}`);
 }

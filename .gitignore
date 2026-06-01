@@ -5,3 +5,6 @@ dist/
 
 # Private keys and certificates
 certs/
+
+# Per-instance OAuth client registry (data/clients.json)
+data/
