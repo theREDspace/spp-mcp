@@ -1,24 +1,28 @@
 import { z } from 'zod';
 import type { Tool } from './types';
+import { ok, fail } from '../helpers/toolResult';
 
-/**
- * whoami tool: Returns identity of the logged-in user, including id, name, email, manager id, and department id.
- */
 const whoami: Tool = {
   name: 'whoami',
   description: 'Returns logged-in user info: id, name, email, manager id, department id.',
-  inputSchema: z.object({}), // no input
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    user: z.object({
+      id: z.string().nullable(),
+      name: z.string().nullable(),
+      email: z.string().nullable(),
+      manager_id: z.string().nullable(),
+      department_id: z.string().nullable(),
+      nickname: z.string().nullable(),
+      active: z.any().nullable(),
+    }).nullable(),
+  }),
   handler: async (_args, ctx) => {
     const user = await ctx.sppClient.whoami();
     if (!user) {
-      return {
-        content: [
-          { type: 'text', text: 'No user is currently authenticated (token invalid or expired).' }
-        ]
-      };
+      return fail(new Error('No user is currently authenticated (token invalid or expired).'));
     }
-    // Narrowed projection — avoid leaking the full User record (custom fields,
-    // SSN-like identifiers, etc.). Callers can fetch more via generic_read.
     const projected = {
       id: user.id ?? null,
       name: user.name || `${(user as any).addr?.first || ''} ${(user as any).addr?.last || ''}`.trim() || null,
@@ -28,11 +32,7 @@ const whoami: Tool = {
       nickname: (user as any).nickname || null,
       active: (user as any).active ?? null,
     };
-    return {
-      content: [
-        { type: 'text', text: JSON.stringify(projected, null, 2) }
-      ]
-    };
+    return ok({ ok: true, user: projected });
   },
 };
 
