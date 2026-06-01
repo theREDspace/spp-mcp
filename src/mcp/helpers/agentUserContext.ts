@@ -8,7 +8,7 @@ import type SPPClient from '../../clients/SPPClient';
 
 // Single source of truth for which object types require a user context guard.
 // Extend this list when adding new user-bound BOs.
-export const USER_BOUND_OBJECTS = ['Timesheet', 'TimeEntry', 'ResourceProfile'] as const;
+export const USER_BOUND_OBJECTS = ['Timesheet', 'TimeEntry', 'ResourceProfile', 'User'] as const;
 
 // Resolves and returns both the userId and the name of the user field for the given objectType.
 // Throws if it cannot resolve either.
@@ -29,12 +29,16 @@ export async function resolveUserContext({
   if (!schema) throw new Error(`Unknown object type: ${objectType}`);
 
   // Find which field carries the userId for this object.
-  // Convention: prefer explicit 'userid' field, then any field containing 'user',
+  // Special case: the User BO itself has no `userid` field — the user *is* the row,
+  // so the identifying field is just `id`.
+  // Otherwise: prefer explicit 'userid' field, then any field containing 'user',
   // then canonicalId if it contains 'user'.
   const userField =
-    schema.fields.find(f => f.name.toLowerCase() === 'userid')?.name ||
-    schema.fields.find(f => f.name.toLowerCase().includes('user'))?.name ||
-    (schema.canonicalId.toLowerCase().includes('user') ? schema.canonicalId : undefined);
+    objectType === 'User'
+      ? 'id'
+      : schema.fields.find(f => f.name.toLowerCase() === 'userid')?.name ||
+        schema.fields.find(f => f.name.toLowerCase().includes('user'))?.name ||
+        (schema.canonicalId.toLowerCase().includes('user') ? schema.canonicalId : undefined);
 
   if (!userField) throw new Error(`No user field found for ${objectType}`);
 

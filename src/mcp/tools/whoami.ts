@@ -23,12 +23,13 @@ const whoami: Tool = {
     if (!user) {
       return fail(new Error('No user is currently authenticated (token invalid or expired).'));
     }
+    const toStr = (v: any) => (v === null || v === undefined || v === '' ? null : String(v));
     const projected = {
-      id: user.id ?? null,
+      id: toStr(user.id),
       name: user.name || `${(user as any).addr?.first || ''} ${(user as any).addr?.last || ''}`.trim() || null,
       email: (user as any).addr?.email || null,
-      manager_id: (user as any).line_managerid || null,
-      department_id: (user as any).departmentid || null,
+      manager_id: toStr((user as any).line_managerid),
+      department_id: toStr((user as any).departmentid),
       nickname: (user as any).nickname || null,
       active: (user as any).active ?? null,
     };
