@@ -1,39 +1,21 @@
 import { Request, Response } from 'express';
+import { createClient } from './clientRegistry';
 
 /**
- * POST /oauth/register
+ * POST /oauth/register — RFC 7591 Dynamic Client Registration.
  *
- * Stub Dynamic Client Registration (RFC 7591) endpoint.
+ * Issues a NEW per-client client_id/client_secret on every call. The proxy
+ * holds these locally (data/clients.json) and translates incoming auth at
+ * /oauth/token into the single upstream SPP credential pair. This prevents
+ * leaking SPP_CLIENT_SECRET to MCP clients.
  *
- * MCP clients like mcp-remote require DCR to obtain a client_id before
- * starting the OAuth flow. Since our SPP OAuth app is pre-registered, we
- * simply return the existing credentials to any caller.
- *
- * This effectively makes the SPP app a "shared" OAuth client for all MCP
- * consumers — which is fine for internal/dev use.
- *
- * SECURITY: This endpoint returns SPP_CLIENT_SECRET to callers.
- * To restrict access, set REGISTRATION_SECRET in your environment.
- * When set, callers must supply it as: Authorization: Bearer <REGISTRATION_SECRET>
- * When unset, any caller can retrieve the credentials (acceptable on private networks).
+ * Gate registration with REGISTRATION_SECRET in any non-trivial deployment.
  */
 export function oauthRegisterHandler(req: Request, res: Response) {
-  const clientId = process.env.SPP_CLIENT_ID;
-  const clientSecret = process.env.SPP_CLIENT_SECRET;
   const registrationSecret = process.env.REGISTRATION_SECRET;
-
-  if (!clientId || !clientSecret) {
-    res.status(500).json({
-      error: 'server_error',
-      error_description: 'SPP_CLIENT_ID or SPP_CLIENT_SECRET not configured.',
-    });
-    return;
-  }
-
-  // Optional bearer-token guard — enabled when REGISTRATION_SECRET is set in env
   if (registrationSecret) {
-    const authHeader = req.headers.authorization || '';
-    const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const auth = req.headers.authorization || '';
+    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
     if (provided !== registrationSecret) {
       res.status(401).json({
         error: 'unauthorized_client',
@@ -43,17 +25,30 @@ export function oauthRegisterHandler(req: Request, res: Response) {
     }
   }
 
-  // Prevent credentials from being stored in caches, logs, or browser history
+  const body = (req.body || {}) as Record<string, unknown>;
+  const { record, client_secret } = createClient({
+    client_name: typeof body.client_name === 'string' ? body.client_name : undefined,
+    redirect_uris: Array.isArray(body.redirect_uris)
+      ? (body.redirect_uris as unknown[]).filter((x): x is string => typeof x === 'string')
+      : undefined,
+    token_endpoint_auth_method:
+      typeof body.token_endpoint_auth_method === 'string'
+        ? body.token_endpoint_auth_method
+        : undefined,
+  });
+
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
 
   res.status(201).json({
-    client_id: clientId,
-    client_secret: clientSecret,
-    client_name: req.body?.client_name || 'mcp-client',
-    redirect_uris: req.body?.redirect_uris || [],
+    client_id: record.client_id,
+    client_secret,
+    client_id_issued_at: Math.floor(record.created_at / 1000),
+    client_secret_expires_at: 0, // never expires
+    client_name: record.client_name,
+    redirect_uris: record.redirect_uris,
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
-    token_endpoint_auth_method: 'client_secret_post',
+    token_endpoint_auth_method: record.token_endpoint_auth_method,
   });
 }

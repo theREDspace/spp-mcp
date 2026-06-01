@@ -42,3 +42,19 @@ class TtlMap<V extends { createdAt: number }> {
 }
 
 export const pendingAuthRequests = new TtlMap<PendingAuthEntry>();
+
+/**
+ * Binding from the SPP-issued auth `code` back to the PKCE challenge captured
+ * during /oauth/authorize. Populated in /callback/spp, consumed (and deleted)
+ * in /oauth/token to validate the client's code_verifier before forwarding
+ * the code to SPP.
+ */
+export interface CodeBinding {
+  codeChallenge?: string | undefined;
+  codeChallengeMethod?: 'S256' | 'plain' | undefined;
+  proxyClientId?: string | undefined;
+  clientRedirectUri: string;
+  createdAt: number;
+}
+
+export const codeBindings = new TtlMap<CodeBinding>();
