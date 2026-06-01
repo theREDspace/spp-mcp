@@ -5,65 +5,62 @@ import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserCont
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
 import { semanticPatterns } from '../../services/semanticPatternsRegistry';
 import type { BOName } from '../../services/BORecordMap';
-
+import { objectTypeSchema, boFieldsSchema, crudOutputSchema } from '../helpers/schemas';
+import { ok, fail } from '../helpers/toolResult';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  objectType: z.string().describe('Business object type.'),
-  filter: z.object({}).describe('Filter object mapping field names to values.').default({}),
+  objectType: objectTypeSchema,
+  filter: boFieldsSchema.default({}),
   limit: z.number().describe('Max rows').default(100),
   offset: z.number().describe('Offset for paging').default(0),
   preferSelf: z.boolean().optional().describe('If true, use the current logged-in user as the user context.'),
-  userName: z.string().optional().describe('Name or identifier of the user to operate on behalf of.')
+  userName: z.string().optional().describe('Name or identifier of the user to operate on behalf of.'),
 });
 
 const genericList: Tool = {
   name: 'generic_list',
   description: 'List/search records for any business object using filter fields',
   inputSchema,
+  outputSchema: crudOutputSchema,
   handler: async (
     { objectType, filter = {}, limit = 100, offset = 0, preferSelf = false, userName }: { objectType: string; filter?: Record<string, any>; limit?: number; offset?: number; preferSelf?: boolean; userName?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    console.log("[genericList] objectType:", objectType);
-    if (!boSchemaRegistry[objectType]) throw new Error(`Unknown objectType '${objectType}'`);
-    // --- USER CONTEXT GUARD: if this BO requires a user, auto-resolve if needed ---
+    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     let patchedFilter = { ...filter };
     if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
         const { userId, userField } = await resolveUserContext({ objectType, payloadOrFilter: filter, sppClient, preferSelf, userName });
         patchedFilter[userField] = userId;
       } catch (e) {
-        return { content: [{ type: 'text', text: `User context resolution error: ${(e as Error).message}` }] };
+        return fail(e);
       }
     }
+
     let normFilter;
     try {
       normFilter = normalizeAndValidateBOInput(objectType, patchedFilter, 'filter');
     } catch (validationErr) {
-      // Enhance error with semantic pattern help if relevant
-      // Heuristic: if attempted filter contains a key not in any registered field, suggest
       const allFields = (boSchemaRegistry[objectType]?.fields ?? []).map(f => f.name);
       const badFields = Object.keys(filter).filter(k => !allFields.includes(k));
-      let bestMatch = null;
-      if (badFields.length) {
-        // Search for pattern mentioning bad field or this intent
-        bestMatch = semanticPatterns.find(p =>
-          badFields.some(bf =>
-            (p.correct_usage && p.correct_usage.includes(bf)) || (p.example?.filter && Object.keys(p.example.filter).includes(bf))
+      const bestMatch = badFields.length
+        ? semanticPatterns.find(p =>
+            badFields.some(bf =>
+              (p.correct_usage && p.correct_usage.includes(bf)) ||
+              (p.example?.filter && Object.keys(p.example.filter).includes(bf))
+            ) ||
+            (p.intent && p.intent.toLowerCase().includes(objectType.toLowerCase()))
           )
-          || (p.intent && p.intent.toLowerCase().includes(objectType.toLowerCase()))
-        );
-      }
-      const errorResp = {
-        error: `Invalid filter field(s): ${badFields.join(', ')} for object '${objectType}'.`,
-        suggestion: bestMatch ? bestMatch.correct_usage : undefined,
-        example: bestMatch ? bestMatch.example : undefined
-      };
-      return { content: [{ type: 'text', text: JSON.stringify(errorResp) }] };
+        : null;
+      return fail(
+        new Error(`Invalid filter field(s): ${badFields.join(', ')} for object '${objectType}'.`),
+        bestMatch ? { suggestion: bestMatch.correct_usage, example: bestMatch.example } : undefined
+      );
     }
-    const result = await sppClient.list(objectType as BOName, normFilter, limit, offset);
-    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+
+    const data = await sppClient.list(objectType as BOName, normFilter, limit, offset);
+    return ok({ ok: true, objectType, operation: 'list', count: Array.isArray(data) ? data.length : undefined, data });
   },
 };
 export default genericList;
