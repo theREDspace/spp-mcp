@@ -29,6 +29,8 @@ class SPPClient {
   private accessToken: string | undefined | null;
   private onError: (err: any) => void;
 
+  private boService: BOService;
+
   constructor(options: SPPClientOptions) {
     this.sppUrl = options?.sppUrl || process.env.SPP_URL!;
     if (!this.sppUrl) {
@@ -75,14 +77,36 @@ class SPPClient {
     } else {
       Logger.configure({ enabled: false, level: 'log' });
     }
+
+    this.boService = new BOService(this);
   }
 
   setAccessToken(token: string | undefined | null): void {
     this.accessToken = token;
   }
 
-  private _wrapXml(query: string): string {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    <request API_version="1.0" client="Xero Connector" client_ver="1.1" namespace="${process.env.SPP_NAMESPACE}" key="${process.env.SPP_KEY}">\n      <Auth><Login><access_token>__ACCESS_TOKEN__</access_token></Login></Auth>\n      ${query}\n    </request>`;
+  private static readonly xmlParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "",
+  });
+
+  private static escapeXmlAttr(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  private _wrapXml(query: string, accessToken: string): string {
+    // XML-escape every untrusted attribute/value. The access token and the
+    // SPP credentials all flow into attribute or element content; a stray
+    // quote or ampersand would break the request — or worse, smuggle XML.
+    const ns = SPPClient.escapeXmlAttr(process.env.SPP_NAMESPACE || "");
+    const key = SPPClient.escapeXmlAttr(process.env.SPP_KEY || "");
+    const tok = SPPClient.escapeXmlAttr(accessToken);
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    <request API_version="1.0" client_ver="1.1" namespace="${ns}" key="${key}">\n      <Auth><Login><access_token>${tok}</access_token></Login></Auth>\n      ${query}\n    </request>`;
   }
 
   async callSPPXML<T = any>(rawXml: string): Promise<T[]> {
@@ -95,8 +119,7 @@ class SPPClient {
       });
     }
 
-    const wrappedXml = this._wrapXml(rawXml)
-      .replace(/__ACCESS_TOKEN__/g, this.accessToken);
+    const wrappedXml = this._wrapXml(rawXml, this.accessToken);
 
     Logger.debug('callSPPXML', 'Sending XML:');
     Logger.debug('callSPPXML', wrappedXml);
@@ -118,12 +141,8 @@ class SPPClient {
       throw wrapped;
     }
 
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: "",
-    });
     Logger.debug('callSPPXML', 'Raw response data:', resp.data);
-    const parsed = parser.parse(resp.data);
+    const parsed = SPPClient.xmlParser.parse(resp.data);
 
     // Check for auth failure in SPP XML response — throw so the caller can surface it
     const authNode = parsed.response?.Auth;
@@ -155,7 +174,7 @@ class SPPClient {
     limit = 1000,
     offset = 0
   ): Promise<BORecordMap[BO][]> {
-    return new BOService(this).list(bo, filter, limit, offset);
+    return this.boService.list(bo, filter, limit, offset);
   }
 
   batchList<BO extends keyof BORecordMap>(
@@ -164,7 +183,7 @@ class SPPClient {
     limit = 1000,
     offset = 0
   ): Promise<BORecordMap[BO][]> {
-    return new BOService(this).batchList(bo, filter, limit, offset);
+    return this.boService.batchList(bo, filter, limit, offset);
   }
 
   read<BO extends keyof BORecordMap>(
@@ -172,14 +191,14 @@ class SPPClient {
     id: string,
     idField: string = 'id'
   ): Promise<BORecordMap[BO] | undefined> {
-    return new BOService(this).read(bo, id, idField);
+    return this.boService.read(bo, id, idField);
   }
 
   add<BO extends keyof BORecordMap>(
     bo: BO,
     payload: Partial<BORecordMap[BO]> | Partial<BORecordMap[BO]>[]
   ): Promise<BORecordMap[BO][]> {
-    return new BOService(this).add(bo, payload);
+    return this.boService.add(bo, payload);
   }
 
   update<BO extends keyof BORecordMap>(
@@ -187,14 +206,14 @@ class SPPClient {
     idOrUpdates: string | { id: string; changes: Partial<BORecordMap[BO]> }[],
     changes?: Partial<BORecordMap[BO]>
   ): Promise<BORecordMap[BO] | BORecordMap[BO][]> {
-    return new BOService(this).update(bo, idOrUpdates, changes);
+    return this.boService.update(bo, idOrUpdates, changes);
   }
 
   delete<BO extends keyof BORecordMap>(
     bo: BO,
     id: string | string[]
   ): Promise<BORecordMap[BO][]> {
-    return new BOService(this).delete(bo, id);
+    return this.boService.delete(bo, id);
   }
 
   /**
@@ -206,7 +225,7 @@ class SPPClient {
     company: Partial<Company>,
     options?: CreateUserOptions
   ): Promise<User> {
-    return new BOService(this).createUser(user, company, options);
+    return this.boService.createUser(user, company, options);
   }
 
   async whoami(): Promise<User | undefined> {
