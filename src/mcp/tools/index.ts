@@ -8,6 +8,7 @@ import listObjectTypes from './listObjectTypes';
 import describeObjectType from './describeObjectType';
 import echo from './echo';
 import whoami from './whoami';
+import getUserProfile from './getUserProfile';
 import type { Tool } from './types';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -25,6 +26,7 @@ export const mcpTools: Tool[] = [
   genericDelete,
   // Utility
   whoami,
+  getUserProfile,
   // Debug-only — excluded in production
   ...(isProd ? [] : [echo]),
 ];

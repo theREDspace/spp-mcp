@@ -60,7 +60,18 @@ const genericList: Tool = {
     }
 
     const data = await sppClient.list(objectType as BOName, normFilter, limit, offset);
-    return ok({ ok: true, objectType, operation: 'list', count: Array.isArray(data) ? data.length : undefined, data });
+    const count = Array.isArray(data) ? data.length : undefined;
+    const result: Record<string, unknown> = {
+      ok: true,
+      objectType,
+      operation: 'list',
+      count,
+      data,
+    };
+    if (count === 0) {
+      result.message = `No ${objectType} records matched the filter. The records may not exist or may not be visible to the current user.`;
+    }
+    return ok(result);
   },
 };
 export default genericList;

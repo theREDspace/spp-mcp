@@ -17,6 +17,29 @@ export interface CreateUserOptions {
   lookup?: string;
 }
 
+/**
+ * SPP returns code "1" (UnknownError) for many cases that are really just
+ * "no records matched" or "the record you queried isn't visible to this user".
+ * In list/read contexts we want to treat these as "empty result" rather than
+ * propagating an exception that would surface to MCP clients as a hard error.
+ *
+ * NOTE: We do NOT swallow auth errors here — those still need to bubble up so
+ * the client can prompt the user to re-authenticate.
+ */
+const NOT_FOUND_CODES: Set<string> = new Set([
+  String(SPPStatus.UnknownError),  // "1" — SPP commonly returns this for "not found"
+  String(SPPStatus.NotFound),       // "601"
+  String(SPPStatus.LookupNotLocated), // "910"
+]);
+
+function isNotFoundError(err: unknown): boolean {
+  if (err instanceof SPPResponseError) {
+    const code = String(err.detail?.code ?? '');
+    return NOT_FOUND_CODES.has(code);
+  }
+  return false;
+}
+
 export class BOService {
   constructor(protected client: SPPClient) {}
 
@@ -35,8 +58,18 @@ export class BOService {
     const xml = XmlBuilder.buildGet(String(bo), filter, limit, offset, method);
 
     // Parse the XML response into wrapper objects
-    let records: BORecordMap[BO][] | BORecordMap[BO] =
-      await this.client.callSPPXML<BORecordMap[BO][]>(xml);
+    let records: BORecordMap[BO][] | BORecordMap[BO];
+    try {
+      records = await this.client.callSPPXML<BORecordMap[BO][]>(xml);
+    } catch (err) {
+      // SPP returns "not found" as an exception even when it's really "no matches".
+      // Convert to an empty result so callers don't have to special-case it.
+      if (isNotFoundError(err)) {
+        Logger.debug('BOService', `list(${String(bo)}): SPP reported not-found, returning [] (filter=${JSON.stringify(filter)})`);
+        return [];
+      }
+      throw err;
+    }
 
     // Normalize to array
     if (records == null) {
@@ -69,8 +102,16 @@ export class BOService {
       .join("\n"); // Join with a newline for readability in the XML, if needed
 
     // Send the combined XML as a single request
-    let records: BORecordMap[BO][] | BORecordMap[BO] =
-      await this.client.callSPPXML<BORecordMap[BO][]>(combinedXml);
+    let records: BORecordMap[BO][] | BORecordMap[BO];
+    try {
+      records = await this.client.callSPPXML<BORecordMap[BO][]>(combinedXml);
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        Logger.debug('BOService', `batchList(${String(bo)}): SPP reported not-found, returning []`);
+        return [];
+      }
+      throw err;
+    }
 
     // Normalize to array
     if (records == null) {

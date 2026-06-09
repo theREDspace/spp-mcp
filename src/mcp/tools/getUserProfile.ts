@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import type { Tool } from './types';
 import { ok, fail } from '../helpers/toolResult';
-import { projectPublicUser } from '../helpers/userProjection';
+import { projectPublicUser, type PublicUserProfile } from '../helpers/userProjection';
 
-const whoami: Tool = {
-  name: 'whoami',
-  description: 'Returns logged-in user info: id, name, email, manager id, department id, role id.',
-  inputSchema: z.object({}),
+const getUserProfile: Tool = {
+  name: 'get_user_profile',
+  description: 'Get public profile information for a user by ID. Returns safe fields only (id, name, email, department, role, manager). Does NOT expose sensitive data like passwords, SSN, or salary information.',
+  inputSchema: z.object({
+    user_id: z.string().describe('The ID of the user to retrieve'),
+  }),
   // Permissive object schema so both success and error shapes pass client-side AJV validation.
   // MCP requires outputSchema to be an object (not a union), so all fields are optional.
   outputSchema: z.object({
@@ -23,6 +25,7 @@ const whoami: Tool = {
       code: z.string().nullable(),
       manager_id: z.string().nullable(),
     }).nullable().optional(),
+    message: z.string().optional(),
     // Error-path fields (from fail() helper)
     error: z.string().optional(),
     type: z.string().optional(),
@@ -31,14 +34,28 @@ const whoami: Tool = {
     suggestion: z.string().optional(),
     example: z.any().optional(),
   }),
-  handler: async (_args, ctx) => {
-    const user = await ctx.sppClient.whoami();
-    if (!user) {
-      return fail(new Error('No user is currently authenticated (token invalid or expired).'));
+  handler: async ({ user_id }, ctx) => {
+    if (!user_id || user_id.trim() === '') {
+      return fail(new Error('user_id is required and cannot be empty'));
     }
-    const projected = projectPublicUser(user);
-    return ok({ ok: true, user: projected });
+
+    const rawUser = await ctx.sppClient.read('User', user_id, 'id');
+    
+    if (!rawUser) {
+      return ok({
+        ok: true,
+        user: null,
+        message: `User with ID '${user_id}' not found.`,
+      });
+    }
+
+    const profile = projectPublicUser(rawUser);
+
+    return ok({
+      ok: true,
+      user: profile,
+    });
   },
 };
 
-export default whoami;
+export default getUserProfile;

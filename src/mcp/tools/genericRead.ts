@@ -27,7 +27,19 @@ const genericRead: Tool = {
       ? { idField, id }
       : normalizeIdForBO(objectType, { id });
     const data = await sppClient.read(objectType as BOName, resolved.id, resolved.idField);
-    return ok({ ok: true, objectType, operation: 'read', data });
+    if (data == null) {
+      // Not found OR not visible to current user — return success with null
+      // so the caller can distinguish "no record" from "operation failed".
+      return ok({
+        ok: true,
+        objectType,
+        operation: 'read',
+        data: null,
+        count: 0,
+        message: `No ${objectType} found with ${resolved.idField}='${resolved.id}'. The record may not exist or may not be visible to the current user.`,
+      });
+    }
+    return ok({ ok: true, objectType, operation: 'read', data, count: 1 });
   },
 };
 export default genericRead;

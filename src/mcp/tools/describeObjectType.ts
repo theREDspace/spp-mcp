@@ -12,7 +12,20 @@ const describeObjectType: Tool = {
   name: 'describe_object_type',
   description: 'Describe the schema, canonical/alternate keys, required fields, and examples for any business object type. Prefer the bo://schema/{objectType} resource if your client supports MCP resources.',
   inputSchema,
-  outputSchema: z.object({ ok: z.boolean(), objectType: z.string(), schema: z.any() }),
+  // Permissive object schema so both success and error shapes pass client-side AJV validation.
+  outputSchema: z.object({
+    // Success-path fields
+    ok: z.boolean().optional(),
+    objectType: z.string().optional(),
+    schema: z.any().optional(),
+    // Error-path fields (from fail() helper)
+    error: z.string().optional(),
+    type: z.string().optional(),
+    code: z.string().optional(),
+    hint: z.string().optional(),
+    suggestion: z.string().optional(),
+    example: z.any().optional(),
+  }),
   handler: async ({ objectType }: { objectType: string }) => {
     const schema = boSchemaRegistry[objectType];
     if (!schema) return fail(new Error(`Unknown objectType '${objectType}'`));

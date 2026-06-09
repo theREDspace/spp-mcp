@@ -160,11 +160,27 @@ All proposed tools are implementable using `SPPClient.list()`, `SPPClient.read()
 
 | User Question | Why It Fails | Proposed Tool |
 |---|---|---|
+| "Who is my manager?" | ✅ **SOLVED** via `whoami` → `get_user_profile` | ✅ `get_user_profile` (implemented) |
+| "Who is user X?" | `generic_read('User')` exposes sensitive fields | ✅ `get_user_profile` (implemented) |
 | "What departments do we have?" | No `Department` tool | **`list_departments`** |
 | "What roles exist in the system?" | No `Role` tool | **`list_roles`** |
 | "What cost centers do we have?" | No `CostCenter` tool | **`list_cost_centers`** |
 | "Show me the project hierarchy" | No `Hierarchy`/`HierarchyNode` tool | **`get_project_hierarchy`** |
 | "What job codes are available?" | Already accessible via `Jobcode` BO but no tool | **`list_job_codes`** |
+
+### Implemented Tools ✅
+
+| Tool Name | BO Used | Description | Key Params | Status |
+|---|---|---|---|---|
+| `get_user_profile` | `User` | Get safe public profile for any user (id, name, email, department, role, manager). Does NOT expose password, SSN, salary, or payroll data. | `user_id` | ✅ Implemented |
+
+**Usage Pattern for "Who is my manager?"**
+1. Call `whoami` → returns `manager_id`
+2. Call `get_user_profile(manager_id)` → returns safe manager profile
+
+**Shared Infrastructure**
+- `src/mcp/helpers/userProjection.ts` — `projectPublicUser()` helper ensures consistent safe field projection across all tools
+- `whoami` refactored to use the same projection for consistency
 
 ### Proposed Tools
 
@@ -281,7 +297,9 @@ Response: "User ID 111: Booked Sep 1–Sep 14, 2023, at 50%"
 Better: "John Smith (User ID 111): Booked Sep 1–Sep 14, 2023, at 50%"
 ```
 
-**Solution:** Enrich `list_bookings` response by batch-fetching user names via `client.batchList('User', ...)`.
+**Solution:** ✅ **INFRASTRUCTURE NOW AVAILABLE** — Use `projectPublicUser()` from `src/mcp/helpers/userProjection.ts` + `get_user_profile` tool to enrich responses with user names. Batch-fetch users via `client.batchList('User', ...)` and apply the safe projection.
+
+**Status:** 🟡 Infrastructure ready — now needs integration into each affected tool.
 
 **Impact:** This improvement should also apply to:
 - `list_bookings` — include user names

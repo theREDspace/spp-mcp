@@ -18,6 +18,8 @@ function summarize(name: string, schema: (typeof boSchemaRegistry)[string]) {
     alternateIds: schema.alternateIds,
     requiredFields: schema.requiredFields,
     fieldCount: schema.fields.length,
+    relationshipCount: schema.relationships?.length ?? 0,
+    relationships: schema.relationships ?? [],
     schemaUri: `bo://schema/${name}`,
   };
 }
@@ -30,7 +32,7 @@ export function registerBoResources(server: McpServer): void {
     {
       title: 'Business Object Catalog',
       description:
-        'List of every supported SuiteProjects Pro business object, with a pointer to the full schema for each (bo://schema/{objectType}).',
+        'List of every supported SuiteProjects Pro business object, with canonical/alternate IDs, required fields, relationship metadata (foreign keys), and a pointer to the full schema for each (bo://schema/{objectType}).',
       mimeType: 'application/json',
     },
     async (uri) => {
@@ -73,7 +75,7 @@ export function registerBoResources(server: McpServer): void {
     {
       title: 'Business Object Schema',
       description:
-        'Definitive schema for a single BO: fields with types, required fields, canonical/alternate id fields, and an example payload.',
+        'Definitive schema for a single BO: fields with types, required fields, canonical/alternate id fields, relationship metadata (foreign key mappings to other BOs), and an example payload.',
       mimeType: 'application/json',
     },
     async (uri, vars) => {
