@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pendingAuthRequests } from './oauthState';
 import { getClient } from './clientRegistry';
+import { load as loadConfig } from '../config';
 
 /**
  * GET /oauth/authorize
@@ -12,14 +13,10 @@ import { getClient } from './clientRegistry';
  *    SPP_CLIENT_ID, and redirect to SPP's real /authorize.
  */
 export function oauthAuthorizeHandler(req: Request, res: Response) {
-  const sppUrl = (process.env.SPP_URL || '').replace(/\/$/, '');
-  const callbackUrl = process.env.SPP_CALLBACK_URL;
-  const sppClientId = process.env.SPP_CLIENT_ID;
-
-  if (!sppUrl || !callbackUrl || !sppClientId) {
-    res.status(500).send('Server misconfiguration: SPP_URL / SPP_CALLBACK_URL / SPP_CLIENT_ID missing.');
-    return;
-  }
+  const config = loadConfig();
+  const sppUrl = config.SPP_URL.replace(/\/$/, '');
+  const callbackUrl = config.SPP_CALLBACK_URL;
+  const sppClientId = config.SPP_CLIENT_ID;
 
   const params = new URLSearchParams(req.query as Record<string, string>);
   const clientRedirectUri = params.get('redirect_uri');

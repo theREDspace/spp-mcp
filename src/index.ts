@@ -28,8 +28,13 @@ const config = loadConfig();
 const app = express();
 const PORT = config.PORT;
 
-if (config.TRUST_PROXY) {
-  app.set('trust proxy', config.TRUST_PROXY);
+// In production, the app typically runs behind a reverse proxy (nginx, ALB, etc.)
+// that sets X-Forwarded-For. Trust proxy must be configured so Express and
+// express-rate-limit correctly identify the real client IP.
+// TRUST_PROXY defaults to '1' (trust one hop) in production when not explicitly set.
+const trustProxy = config.TRUST_PROXY ?? (config.NODE_ENV === 'production' ? '1' : undefined);
+if (trustProxy) {
+  app.set('trust proxy', trustProxy);
 }
 
 // Stable per-request id for log correlation, propagated end-to-end.
@@ -63,6 +68,10 @@ const oauthLimiter = rateLimit({
   limit: config.OAUTH_RATE_LIMIT_PER_MIN,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  // Suppress the X-Forwarded-For validation error that crashes the process when
+  // trust proxy is misconfigured. The correct fix is TRUST_PROXY in .env, but
+  // we must never let a rate-limit misconfiguration kill the server.
+  validate: { xForwardedForHeader: false },
 });
 app.use(['/oauth/token', '/oauth/register', '/oauth/authorize', '/callback/spp'], oauthLimiter);
 

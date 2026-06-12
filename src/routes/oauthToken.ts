@@ -3,6 +3,7 @@ import axios from 'axios';
 import { codeBindings } from './oauthState';
 import { extractClientCredentials, verifyClientSecret, getClient } from './clientRegistry';
 import { verifyPkce } from './pkce';
+import { load as loadConfig } from '../config';
 
 /**
  * POST /oauth/token
@@ -16,20 +17,11 @@ import { verifyPkce } from './pkce';
  * 4. Forward the body to SPP and return the response verbatim.
  */
 export async function oauthTokenHandler(req: Request, res: Response) {
-  const sppUrl = (process.env.SPP_URL || '').replace(/\/$/, '');
-  const callbackUrl = process.env.SPP_CALLBACK_URL;
-  const sppClientId = process.env.SPP_CLIENT_ID;
-  const sppClientSecret = process.env.SPP_CLIENT_SECRET;
-
-  if (!sppUrl || !callbackUrl || !sppClientId || !sppClientSecret) {
-    res.status(500).json({
-      error: 'server_error',
-      error_description: 'SPP_URL / SPP_CALLBACK_URL / SPP_CLIENT_ID / SPP_CLIENT_SECRET missing.',
-    });
-    return;
-  }
-
-  const body: Record<string, string> = { ...(req.body || {}) };
+  const config = loadConfig();
+  const sppUrl = config.SPP_URL.replace(/\/$/, '');
+  const callbackUrl = config.SPP_CALLBACK_URL;
+  const sppClientId = config.SPP_CLIENT_ID;
+  const sppClientSecret = config.SPP_CLIENT_SECRET;  const body: Record<string, string> = { ...(req.body || {}) };
   const grantType = body.grant_type || 'unknown';
 
   // ── Authenticate the proxy client ─────────────────────────────────────
