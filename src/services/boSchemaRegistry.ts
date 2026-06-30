@@ -2,20 +2,21 @@
 // Metadata registry for Business Objects (BOs)
 // Used for: generic CRUD tool schema, validation, and agent/LLM discoverability
 
-interface BOFieldSchema {
+export interface BOFieldSchema {
   name: string;
   type: string;
   required?: boolean;
 }
 
-interface BORelationship {
+export interface BORelationship {
   field: string;                    // The foreign key field in this BO
   relatesTo: string;                // The target BO name
   type: 'belongsTo' | 'hasMany';    // Relationship type
   description: string;              // Human-readable description
 }
 
-interface BOSchema {
+export interface BOSchema {
+  source: 'curated' | 'derived' | 'passthrough';
   typeFile: string;
   canonicalId: string;
   alternateIds: string[];
@@ -23,11 +24,12 @@ interface BOSchema {
   fields: BOFieldSchema[];
   filterExample?: Record<string, any>;
   examplePayload?: Record<string, any>;
-  relationships?: BORelationship[];  // NEW: Explicit relationship metadata
+  relationships?: BORelationship[];
 }
 
 export const boSchemaRegistry: Record<string, BOSchema> = {
   BookingSummary: {
+    source: 'curated',
     typeFile: 'src/types/BookingSummary.ts',
     canonicalId: 'user_id',
     alternateIds: ['project_id', 'id'],
@@ -60,6 +62,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     }
   },
   TimeEntry: {
+    source: 'curated',
     typeFile: 'src/types/TimeEntry.ts',
     canonicalId: 'id',
     alternateIds: ['userid', 'timesheetid', 'projectid'],
@@ -82,6 +85,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Project: {
+    source: 'curated',
     typeFile: 'src/types/Project.ts',
     canonicalId: 'id',
     alternateIds: ['code', 'externalid'],
@@ -100,6 +104,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { code: 'P-12121', name: 'Test Project', userid: 'U102' }
   },
   User: {
+    source: 'curated',
     typeFile: 'src/types/User.ts',
     canonicalId: 'id',
     alternateIds: ['code', 'externalid', 'external_id'],
@@ -116,6 +121,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Bob', externalid: 'ext42' }
   },
   Slip: {
+    source: 'curated',
     typeFile: 'src/types/Slip.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -129,6 +135,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { userid: 'U789', projectid: 'P222', hour: 6 }
   },
   Customer: {
+    source: 'curated',
     typeFile: 'src/types/Customer.ts',
     canonicalId: 'id',
     alternateIds: ['externalid', 'code'],
@@ -142,6 +149,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Acme Test', externalid: 'acme-001' }
   },
   Timesheet: {
+    source: 'curated',
     typeFile: 'src/types/Timesheet.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -154,6 +162,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { userid: 'U789', name: 'Weekly Entry' }
   },
   Task: {
+    source: 'curated',
     typeFile: 'src/types/Task.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -167,6 +176,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { projectid: 'P222', date: { Date: { year: 2023, month: 5, day: 22, hour: 0, minute: 0, second: 0, timezone: 'UTC' } } }
   },
   Invoice: {
+    source: 'curated',
     typeFile: 'src/types/Invoice.ts',
     canonicalId: 'id',
     alternateIds: ['externalid', 'number'],
@@ -181,6 +191,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { customerid: 'C101', date: { Date: { year: 2023, month: 1, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC' } } }
   },
   ApprovalLine: {
+    source: 'curated',
     typeFile: 'src/types/ApprovalLine.ts',
     canonicalId: 'id',
     alternateIds: ['approvalid'],
@@ -195,6 +206,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { approvalid: 'A456', action: 'S', date: { Date: { year: 2023, month: 6, day: 1, hour: 0, minute: 0, second: 0, timezone: 'UTC' } } }
   },
   Booking: {
+    source: 'curated',
     typeFile: 'src/types/Booking.ts',
     canonicalId: 'id',
     alternateIds: ['externalid'],
@@ -217,6 +229,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   ResourceProfile: {
+    source: 'curated',
     typeFile: 'src/types/ResourceProfile.ts',
     canonicalId: 'id',
     alternateIds: ['externalid'],
@@ -234,6 +247,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 1: PROJECT MANAGEMENT BOs ===
   ProjectTask: {
+    source: 'curated',
     typeFile: 'src/types/ProjectTask.ts',
     canonicalId: 'id',
     alternateIds: ['projectid', 'externalid'],
@@ -294,6 +308,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   ProjectTaskAssign: {
+    source: 'curated',
     typeFile: 'src/types/ProjectTaskAssign.ts',
     canonicalId: 'id',
     alternateIds: ['projecttaskid', 'userid', 'externalid'],
@@ -326,6 +341,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Projectassign: {
+    source: 'curated',
     typeFile: 'src/types/ProjectAssign.ts',
     canonicalId: 'id',
     alternateIds: ['project_id', 'user_id'],
@@ -352,6 +368,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Projectgroup: {
+    source: 'curated',
     typeFile: 'src/types/ProjectGroup.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -369,6 +386,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Dev Team', active: 1, assigned_users: 'U1,U2,U3', notes: 'Development group' }
   },
   ProjectStage: {
+    source: 'curated',
     typeFile: 'src/types/ProjectStage.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -394,6 +412,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Planning', enable_analysis: 1, enable_billing: 0, enable_phase_and_task: 1, enable_pricing: 0, enable_project_assignments: 1, enable_recognition: 0, enable_team: 1, enable_utilization: 1, notes: '', picklist_label: 'Planning Stage', position: 1 }
   },
   ProjectAssignmentProfile: {
+    source: 'curated',
     typeFile: 'src/types/ProjectAssignmentProfile.ts',
     canonicalId: 'id',
     alternateIds: ['customerid', 'projectid'],
@@ -416,6 +435,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 1: ORGANIZATION BOs ===
   Department: {
+    source: 'curated',
     typeFile: 'src/types/Department.ts',
     canonicalId: 'id',
     alternateIds: ['code', 'externalid'],
@@ -439,6 +459,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Company: {
+    source: 'curated',
     typeFile: 'src/types/Company.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -464,6 +485,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { company: 'Acme Corp', base_currency: 'USD' }
   },
   Role: {
+    source: 'curated',
     typeFile: 'src/types/Role.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -484,6 +506,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Project Manager', admin_role: 0, default_role: 0, deleted: 0, notes: 'Standard PM role', permissions: '{}' }
   },
   Hierarchy: {
+    source: 'curated',
     typeFile: 'src/types/Hierarchy.ts',
     canonicalId: 'id',
     alternateIds: ['externalid'],
@@ -507,6 +530,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Project Hierarchy', type: 'project', active: '1', available_as_column: '1', primary_dropdown_filter: '0', primary_user_filterset: '0', required: '0', requireonform: '0' }
   },
   HierarchyNode: {
+    source: 'curated',
     typeFile: 'src/types/HierarchyNode.ts',
     canonicalId: 'id',
     alternateIds: ['hierarchyid', 'externalid'],
@@ -533,6 +557,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Workspace: {
+    source: 'curated',
     typeFile: 'src/types/Workspace.ts',
     canonicalId: 'id',
     alternateIds: ['userid'],
@@ -559,6 +584,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 1: ISSUES/TICKETS BOs ===
   Issue: {
+    source: 'curated',
     typeFile: 'src/types/Issue.ts',
     canonicalId: 'id',
     alternateIds: ['project_id', 'customer_id', 'number'],
@@ -605,6 +631,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   IssueCategory: {
+    source: 'curated',
     typeFile: 'src/types/IssueCategory.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -621,6 +648,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Bug', active: '1' }
   },
   IssueSeverity: {
+    source: 'curated',
     typeFile: 'src/types/IssueSeverity.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -637,6 +665,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'High', active: '1' }
   },
   IssueStatus: {
+    source: 'curated',
     typeFile: 'src/types/IssueStatus.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -653,6 +682,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 2: RESOURCE MANAGEMENT BOs ===
   ResourceRequest: {
+    source: 'curated',
     typeFile: 'src/types/ResourceRequest.ts',
     canonicalId: 'id',
     alternateIds: ['external_id', 'number'],
@@ -689,6 +719,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   ResourceprofileType: {
+    source: 'curated',
     typeFile: 'src/types/ResourceProfileType.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -705,6 +736,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Developer', active: 1 }
   },
   BookingByDay: {
+    source: 'curated',
     typeFile: 'src/types/BookingByDay.ts',
     canonicalId: 'id',
     alternateIds: ['booking_id', 'userid', 'project_id'],
@@ -736,6 +768,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   BookingRequest: {
+    source: 'curated',
     typeFile: 'src/types/BookingRequest.ts',
     canonicalId: 'id',
     alternateIds: ['external_id', 'number'],
@@ -778,6 +811,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   BookingType: {
+    source: 'curated',
     typeFile: 'src/types/BookingType.ts',
     canonicalId: 'id',
     alternateIds: [],
@@ -798,6 +832,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     examplePayload: { name: 'Standard Booking', active: '1' }
   },
   TargetUtilization: {
+    source: 'curated',
     typeFile: 'src/types/TargetUtilization.ts',
     canonicalId: 'id',
     alternateIds: ['user_id'],
@@ -819,6 +854,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 2: SCHEDULING BOs ===
   ScheduleByDay: {
+    source: 'curated',
     typeFile: 'src/types/ScheduleByDay.ts',
     canonicalId: 'id',
     alternateIds: ['user_id'],
@@ -844,6 +880,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   ScheduleException: {
+    source: 'curated',
     typeFile: 'src/types/Scheduleexception.ts',
     canonicalId: 'id',
     alternateIds: ['userid'],
@@ -869,6 +906,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   UserWorkSchedule: {
+    source: 'curated',
     typeFile: 'src/types/UserWorkSchedule.ts',
     canonicalId: 'id',
     alternateIds: ['userid', 'workscheduleid'],
@@ -901,6 +939,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
   },
   // === PHASE 2: TIME & EXPENSE BOs ===
   Ticket: {
+    source: 'curated',
     typeFile: 'src/types/Ticket.ts',
     canonicalId: 'id',
     alternateIds: ['envelopeid', 'externalid'],
@@ -953,6 +992,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Envelope: {
+    source: 'curated',
     typeFile: 'src/types/Envelope.ts',
     canonicalId: 'id',
     alternateIds: ['number', 'externalid'],
@@ -1004,6 +1044,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Todo: {
+    source: 'curated',
     typeFile: 'src/types/Todo.ts',
     canonicalId: 'id',
     alternateIds: ['userid', 'dealid'],
@@ -1036,6 +1077,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Event: {
+    source: 'curated',
     typeFile: 'src/types/Event.ts',
     canonicalId: 'id',
     alternateIds: ['userid', 'customerid', 'dealid'],
@@ -1061,6 +1103,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Timecard: {
+    source: 'curated',
     typeFile: 'src/types/Timecard.ts',
     canonicalId: 'id',
     alternateIds: ['userid', 'timesheetid'],
@@ -1087,6 +1130,7 @@ export const boSchemaRegistry: Record<string, BOSchema> = {
     ]
   },
   Timetype: {
+    source: 'curated',
     typeFile: 'src/types/TimeType.ts',
     canonicalId: 'id',
     alternateIds: ['code', 'externalid'],

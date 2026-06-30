@@ -1,41 +1,30 @@
 // Shared Zod schemas for generic BO tools.
-//
-// The objectType enum is built once at module load from the BO registry so
-// MCP clients see the full list of valid BO names in the tool schema. This
-// removes a whole class of "unknown objectType" failures.
 
 import { z } from 'zod';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
+import { mergedRegistry } from '../../services/registry';
 
-const boNames = Object.keys(boSchemaRegistry);
+const boNames = Object.keys(mergedRegistry);
 if (boNames.length === 0) {
-  throw new Error('boSchemaRegistry is empty — refusing to start with no objectType options.');
+  throw new Error('mergedRegistry is empty — refusing to start with no objectType options.');
 }
 
-// z.enum needs a non-empty tuple type.
+// z.string() instead of z.enum() — allows truly unknown BO names (passthrough layer).
 export const objectTypeSchema = z
-  .enum(boNames as [string, ...string[]])
+  .string()
   .describe(
-    'Business object type. Field names, required fields, and example payloads vary per type — read the bo://schema/{objectType} resource for the definitive schema.'
+    'Business object type name (e.g. "Project", "Booking", "Attributeset"). Call list_object_types to see all known types, or describe_object_type to inspect a specific type\'s fields and schema tier (curated/derived/passthrough).'
   );
 
-/** A flexible record schema for payload/filter/changes. Per-field validation
- *  still happens server-side in normalizeAndValidateBOInput using the BO
- *  registry, but we expose a permissive shape to the LLM so it can craft
- *  arbitrary keyed objects. */
 export const boFieldsSchema = z
   .record(z.string(), z.any())
   .describe(
-    'String-keyed map of BO field names → values. The exact field names depend on objectType — fetch bo://schema/{objectType} for the canonical list, required fields, and example.'
+    'String-keyed map of BO field names → values. For curated types, call describe_object_type first to get the exact field names. For derived/passthrough types, unknown fields pass through to SuiteProjects Pro for validation.'
   );
 
 export const boFieldsArraySchema = z
   .array(boFieldsSchema)
   .describe('Array of filter objects, one per parallel query.');
 
-/** Error response shape returned by fail() helper. Export for reuse in all tools.
- *  Note: this is a permissive object schema (all fields optional) so it can also
- *  satisfy clients that strictly validate against MCP's outputSchema. */
 export const errorResponseSchema = z
   .object({
     error: z.string().optional(),
@@ -47,15 +36,6 @@ export const errorResponseSchema = z
   })
   .describe('Error response envelope.');
 
-/** Generic output shape for all CRUD tools.
- *
- *  IMPORTANT: MCP's standardSchemaToJsonSchema requires the top-level schema
- *  to be an object (it rejects/breaks on unions). To support both success and
- *  error response shapes from a single schema, we declare a single object with
- *  ALL fields optional. Strict per-shape validation is done server-side in the
- *  handler — the outputSchema just needs to be permissive enough that the
- *  client's AJV validator accepts both shapes without "additionalProperties"
- *  or "required property" failures. */
 export const crudOutputSchema = z
   .object({
     // Success-path fields

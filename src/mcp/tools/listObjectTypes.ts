@@ -1,13 +1,13 @@
 import type { Tool } from './types';
 import { z } from 'zod';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
+import { mergedRegistry } from '../../services/registry';
 import { ok } from '../helpers/toolResult';
 
 const inputSchema = z.object({});
 
 const listObjectTypes: Tool = {
   name: 'list_object_types',
-  description: 'List all supported business object types. Prefer reading the bo://catalog resource if your client supports MCP resources.',
+  description: 'List all supported business object types (curated + derived). Prefer reading the bo://catalog resource if your client supports MCP resources.',
   inputSchema,
   // Permissive object schema so both success and error shapes pass client-side AJV validation.
   outputSchema: z.object({
@@ -23,7 +23,7 @@ const listObjectTypes: Tool = {
     example: z.any().optional(),
   }),
   handler: async () => {
-    const objectTypes = Object.keys(boSchemaRegistry);
+    const objectTypes = Object.keys(mergedRegistry);
     return ok({ ok: true, objectTypes });
   },
 };

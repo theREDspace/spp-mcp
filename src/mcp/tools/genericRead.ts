@@ -1,5 +1,4 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { normalizeIdForBO } from '../../utils/normalizeAndValidateBOInput';
 import type { BOName } from '../../services/BORecordMap';
@@ -15,14 +14,13 @@ const inputSchema = z.object({
 
 const genericRead: Tool = {
   name: 'generic_read',
-  description: 'Read a single record from any business object by canonical or alternate ID',
+  description: 'Read a single record from any business object by canonical or alternate ID. Works for curated, derived, and unknown BOs.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, id, idField }: { objectType: string; id: string; idField?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     const resolved = idField
       ? { idField, id }
       : normalizeIdForBO(objectType, { id });

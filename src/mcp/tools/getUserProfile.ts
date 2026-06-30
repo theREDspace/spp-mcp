@@ -5,7 +5,7 @@ import { projectPublicUser, type PublicUserProfile } from '../helpers/userProjec
 
 const getUserProfile: Tool = {
   name: 'get_user_profile',
-  description: 'Get public profile information for a user by ID. Returns safe fields only (id, name, email, department, role, manager). Does NOT expose sensitive data like passwords, SSN, or salary information.',
+  description: 'Get public profile for a specific user by their id. Returns safe fields (id, name, email, department, role, manager). Use this — not generic_list("User") — to look up a specific user by id. Does NOT expose sensitive data like passwords, SSN, or salary.',
   inputSchema: z.object({
     user_id: z.string().describe('The ID of the user to retrieve'),
   }),

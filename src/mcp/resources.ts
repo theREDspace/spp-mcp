@@ -8,12 +8,13 @@
 //   bo://semantic-patterns        → registry of LLM intent → canonical query pattern
 
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import { boSchemaRegistry } from '../services/boSchemaRegistry';
+import { mergedRegistry, getSchema } from '../services/registry';
 import { semanticPatterns } from '../services/semanticPatternsRegistry';
 
-function summarize(name: string, schema: (typeof boSchemaRegistry)[string]) {
+function summarize(name: string, schema: ReturnType<typeof getSchema>) {
   return {
     name,
+    source: schema.source,
     canonicalId: schema.canonicalId,
     alternateIds: schema.alternateIds,
     requiredFields: schema.requiredFields,
@@ -36,7 +37,7 @@ export function registerBoResources(server: McpServer): void {
       mimeType: 'application/json',
     },
     async (uri) => {
-      const objects = Object.entries(boSchemaRegistry).map(([name, schema]) => summarize(name, schema));
+      const objects = Object.entries(mergedRegistry).map(([name, schema]) => summarize(name, schema));
       const payload = { count: objects.length, objects };
       return {
         contents: [
@@ -57,7 +58,7 @@ export function registerBoResources(server: McpServer): void {
       // Enumerate every BO as a concrete resource so clients can discover them
       // via resources/list, not just resources/templates/list.
       list: async () => ({
-        resources: Object.keys(boSchemaRegistry).map((name) => ({
+        resources: Object.keys(mergedRegistry).map((name) => ({
           uri: `bo://schema/${name}`,
           name: `bo-schema-${name}`,
           title: `${name} schema`,
@@ -68,7 +69,7 @@ export function registerBoResources(server: McpServer): void {
       complete: {
         objectType: async (value) => {
           const lower = value.toLowerCase();
-          return Object.keys(boSchemaRegistry).filter((k) => k.toLowerCase().startsWith(lower));
+          return Object.keys(mergedRegistry).filter((k) => k.toLowerCase().startsWith(lower));
         },
       },
     }),
@@ -80,7 +81,7 @@ export function registerBoResources(server: McpServer): void {
     },
     async (uri, vars) => {
       const objectType = String(vars.objectType ?? '');
-      const schema = boSchemaRegistry[objectType];
+      const schema = mergedRegistry[objectType];
       if (!schema) {
         return {
           contents: [

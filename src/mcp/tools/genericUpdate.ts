@@ -1,5 +1,4 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
 import type { BOName } from '../../services/BORecordMap';
@@ -15,14 +14,13 @@ const inputSchema = z.object({
 
 const genericUpdate: Tool = {
   name: 'generic_update',
-  description: 'Update one or more fields for a single record in any business object.',
+  description: 'Update one or more fields for a single record in any business object. Works for curated, derived, and unknown BOs.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, id, changes }: { objectType: string; id: string; changes: Record<string, any> },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     const normChanges = normalizeAndValidateBOInput(objectType, changes, 'changes');
     const data = await sppClient.update(objectType as BOName, id, normChanges);
     return ok({ ok: true, objectType, operation: 'update', data });

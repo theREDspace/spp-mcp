@@ -5,7 +5,7 @@ import { projectPublicUser } from '../helpers/userProjection';
 
 const whoami: Tool = {
   name: 'whoami',
-  description: 'Returns logged-in user info: id, name, email, manager id, department id, role id.',
+  description: 'Returns the currently authenticated user\'s id, name, email, nickname, department id, role id, manager id, and active status. Use this — not generic_list("User") — to discover who is logged in.',
   inputSchema: z.object({}),
   // Permissive object schema so both success and error shapes pass client-side AJV validation.
   // MCP requires outputSchema to be an object (not a union), so all fields are optional.
