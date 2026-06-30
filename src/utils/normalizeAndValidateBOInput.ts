@@ -1,14 +1,18 @@
 import { z, ZodObject, ZodTypeAny } from 'zod';
-import { boSchemaRegistry } from '../services/boSchemaRegistry';
+import { getSchema } from '../services/registry';
 
-// Supports 'payload', 'changes', 'filter', and 'id' contexts.
 type InputContext = 'payload' | 'changes' | 'filter' | 'id';
 
 export function buildZodSchemaForBO(objectType: string, context: InputContext): ZodObject<any> {
-  const boSchema = boSchemaRegistry[objectType];
-  if (!boSchema) throw new Error(`Unknown objectType '${objectType}'`);
+  const boSchema = getSchema(objectType);
 
+  if (boSchema.source === 'passthrough') {
+    return z.object({}).passthrough() as unknown as ZodObject<any>;
+  }
+
+  const isCurated = boSchema.source === 'curated';
   const fieldMap: Record<string, ZodTypeAny> = {};
+
   for (const field of boSchema.fields) {
     let zType: ZodTypeAny;
     switch (field.type) {
@@ -29,7 +33,8 @@ export function buildZodSchemaForBO(objectType: string, context: InputContext): 
         zType = z.union([
           z.object({ Date: z.object({
             year: z.number(), month: z.number(), day: z.number(),
-            hour: z.number().optional(), minute: z.number().optional(), second: z.number().optional(), timezone: z.string().optional()
+            hour: z.number().optional(), minute: z.number().optional(),
+            second: z.number().optional(), timezone: z.string().optional()
           }) }),
           z.string().refine(val => !isNaN(Date.parse(val)), 'Invalid date string'),
           z.date(),
@@ -38,7 +43,8 @@ export function buildZodSchemaForBO(objectType: string, context: InputContext): 
       default:
         zType = z.any();
     }
-    if (context === 'payload') {
+
+    if (context === 'payload' && isCurated) {
       // Use unified check: field is required if in boSchema.requiredFields or field.required
       const isReq = boSchema.requiredFields?.includes(field.name) || field.required;
       fieldMap[field.name] = isReq ? zType : zType.optional();
@@ -47,12 +53,21 @@ export function buildZodSchemaForBO(objectType: string, context: InputContext): 
     }
   }
 
-  let schema = z.object(fieldMap).strict();
-  if (context === 'filter' || context === 'changes') {
-    // Make all optional and allow any subset
-    schema = schema.partial().strict();
+  if (isCurated) {
+    let schema = z.object(fieldMap).strict();
+    if (context === 'filter' || context === 'changes') {
+      // Make all optional and allow any subset
+      schema = schema.partial().strict();
+    }
+    return schema;
+  } else {
+    // Derived: passthrough allows unknown fields
+    const base = z.object(fieldMap).passthrough();
+    if (context === 'filter' || context === 'changes') {
+      return base.partial();
+    }
+    return base;
   }
-  return schema;
 }
 
 export function normalizeAndValidateBOInput(objectType: string, input: any, context: InputContext = 'payload') {
@@ -62,8 +77,7 @@ export function normalizeAndValidateBOInput(objectType: string, input: any, cont
 
 // -- Canonical/alternate ID utility
 export function normalizeIdForBO(objectType: string, input: any): { idField: string; id: any } {
-  const boSchema = boSchemaRegistry[objectType];
-  if (!boSchema) throw new Error(`Unknown objectType '${objectType}'`);
+  const boSchema = getSchema(objectType);
   const { canonicalId, alternateIds } = boSchema;
   // Accepts { id }, or {alternateIdName}.
   const candidates = [canonicalId, ...alternateIds];
