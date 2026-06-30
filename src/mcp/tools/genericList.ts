@@ -1,5 +1,5 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
+import { mergedRegistry } from '../../services/registry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
@@ -20,14 +20,13 @@ const inputSchema = z.object({
 
 const genericList: Tool = {
   name: 'generic_list',
-  description: 'List/search records for any business object using filter fields',
+  description: 'List and search records for ANY SuiteProjects Pro business object. Works for curated, derived, and unknown BO types. If unsure which objectType to use or what fields it accepts, call list_object_types first, then describe_object_type to inspect the schema.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, filter = {}, limit = 100, offset = 0, preferSelf = false, userName }: { objectType: string; filter?: Record<string, any>; limit?: number; offset?: number; preferSelf?: boolean; userName?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     let patchedFilter = { ...filter };
     if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
@@ -42,7 +41,7 @@ const genericList: Tool = {
     try {
       normFilter = normalizeAndValidateBOInput(objectType, patchedFilter, 'filter');
     } catch (validationErr) {
-      const allFields = (boSchemaRegistry[objectType]?.fields ?? []).map(f => f.name);
+      const allFields = (mergedRegistry[objectType]?.fields ?? []).map(f => f.name);
       const badFields = Object.keys(filter).filter(k => !allFields.includes(k));
       const bestMatch = badFields.length
         ? semanticPatterns.find(p =>

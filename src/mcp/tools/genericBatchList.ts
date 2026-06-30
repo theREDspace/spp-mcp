@@ -1,5 +1,4 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
@@ -19,14 +18,13 @@ const inputSchema = z.object({
 
 const genericBatchList: Tool = {
   name: 'generic_batch_list',
-  description: 'Batch list/query objects (multiple filter objects) for any BO',
+  description: 'Batch list/query objects (multiple filter objects) for any BO. Works for curated, derived, and unknown BOs.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, filter = [], limit = 100, offset = 0, preferSelf = false, userName }: { objectType: string; filter: any[]; limit?: number; offset?: number; preferSelf?: boolean; userName?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     let patchedFilters = Array.isArray(filter) ? [...filter] : [];
     if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {

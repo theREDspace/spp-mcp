@@ -1,5 +1,5 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
+import { getSchema } from '../../services/registry';
 import SPPClient from '../../clients/SPPClient';
 import { normalizeIdForBO } from '../../utils/normalizeAndValidateBOInput';
 import type { BOName } from '../../services/BORecordMap';
@@ -15,15 +15,14 @@ const inputSchema = z.object({
 
 const genericDelete: Tool = {
   name: 'generic_delete',
-  description: 'Delete a record by canonical or alternate ID from any business object.',
+  description: 'Delete a record by canonical or alternate ID from any business object. Works for curated, derived, and unknown BOs.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, id, idField }: { objectType: string; id: string; idField?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    const schema = boSchemaRegistry[objectType];
-    if (!schema) return fail(new Error(`Unknown objectType '${objectType}'`));
+    const schema = getSchema(objectType);
     const resolved = idField
       ? { idField, id }
       : normalizeIdForBO(objectType, { id });

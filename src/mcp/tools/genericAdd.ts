@@ -1,5 +1,4 @@
 import type { Tool } from './types';
-import { boSchemaRegistry } from '../../services/boSchemaRegistry';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';
@@ -17,14 +16,13 @@ const inputSchema = z.object({
 
 const genericAdd: Tool = {
   name: 'generic_add',
-  description: 'Add/create a new record for any business object type',
+  description: 'Add/create a new record for any business object type. Works for curated, derived, and unknown BOs.',
   inputSchema,
   outputSchema: crudOutputSchema,
   handler: async (
     { objectType, payload, preferSelf = false, userName }: { objectType: string; payload: Record<string, any>; preferSelf?: boolean; userName?: string },
     { sppClient }: { sppClient: SPPClient }
   ) => {
-    if (!boSchemaRegistry[objectType]) return fail(new Error(`Unknown objectType '${objectType}'`));
     let patchedPayload = { ...payload };
     if ((USER_BOUND_OBJECTS as readonly string[]).includes(objectType)) {
       try {
