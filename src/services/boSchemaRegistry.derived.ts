@@ -1,7 +1,7 @@
 // AUTO-GENERATED — do not edit manually.
 // Regenerate with: npm run gen:registry
 
-import type { BOSchema } from './boSchemaRegistry.js';
+import type { BOSchema } from './boSchemaRegistry';
 
 export const derivedRegistry: Record<string, BOSchema> = {
   AccountingPeriod: {
