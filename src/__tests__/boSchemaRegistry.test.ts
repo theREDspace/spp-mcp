@@ -2,7 +2,7 @@ import { boSchemaRegistry } from '../services/boSchemaRegistry';
 
 describe('boSchemaRegistry', () => {
   it('every entry has source: curated', () => {
-    for (const [name, schema] of Object.entries(boSchemaRegistry)) {
+    for (const schema of Object.values(boSchemaRegistry)) {
       expect(schema.source).toBe('curated');
     }
   });

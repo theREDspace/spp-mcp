@@ -24,7 +24,7 @@ export interface BOSchema {
   fields: BOFieldSchema[];
   filterExample?: Record<string, any>;
   examplePayload?: Record<string, any>;
-  relationships?: BORelationship[];  // NEW: Explicit relationship metadata
+  relationships?: BORelationship[];
 }
 
 export const boSchemaRegistry: Record<string, BOSchema> = {
