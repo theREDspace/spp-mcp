@@ -1,42 +1,44 @@
 # Claude Desktop
 
-Claude Desktop works well with this server when you point it at the public MCP endpoint.
+## Recommended Setup — Native Remote Connector
 
-## Before You Start
+Claude Desktop supports remote MCP servers directly. This is the simplest setup and provides the best authentication experience, including automatic token refresh.
 
-- Run the server locally
-- Expose it with ngrok
-- Make sure `APP_BASE_URL` and `SPP_CALLBACK_URL` use the ngrok HTTPS URL
+1. Make sure the server is running and publicly reachable (e.g. via ngrok).
+2. Ensure `APP_BASE_URL` and `SPP_CALLBACK_URL` in `.env` use the public HTTPS URL.
+3. In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+4. Enter the server URL: `https://your-domain/mcp`
+5. Click **Connect** — a browser tab opens for SPP login. Complete it once.
 
-## Recommended Setup
+That's it. Claude Desktop handles token refresh automatically. You will not be prompted to log in again unless your SPP session expires completely.
 
-If your Claude setup uses `mcp-remote`, add this server entry:
+## Fallback Setup — mcp-remote (older Claude Desktop versions)
+
+If your version of Claude Desktop does not support native remote connectors, use `mcp-remote`:
 
 ```json
 {
   "mcpServers": {
     "redspace-spp": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://your-ngrok-domain/mcp"
-      ]
+      "args": ["-y", "mcp-remote", "https://your-domain/mcp"]
     }
   }
 }
 ```
 
-If your Claude setup supports remote MCP directly, add the server URL:
-
-```text
-https://your-ngrok-domain/mcp
-```
-
-If your Claude setup expects a local command instead of a remote URL, use an MCP bridge such as `mcp-remote` and point it at the same `/mcp` endpoint.
+Add this to your `claude_desktop_config.json` and restart Claude Desktop. On first launch, `mcp-remote` opens a browser tab for login.
 
 ## Tips
 
-- Use OAuth, not a static token
-- Keep `REGISTRATION_SECRET` enabled if the server is reachable from outside your machine
-- If auth gets stuck, compare the callback URL in Claude, ngrok, and SuiteProjects Pro
+- Keep `REGISTRATION_SECRET` set if the server is reachable from outside your machine.
+- If the ngrok URL changes, update `APP_BASE_URL` and `SPP_CALLBACK_URL` in `.env` and restart the server.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Auth prompt never appeared / tools fail silently | You are using the `mcp-remote` config. Clear its token cache: `rm -rf ~/.mcp-auth` then fully quit and reopen Claude Desktop. |
+| OAuth loops / callback error | `SPP_CALLBACK_URL` must match the URL registered in the SuiteProjects Pro OAuth app exactly. |
+| `401` on every tool call after re-login | Token refresh is working. If it keeps looping, check `docs/token-lifetimes.md` for refresh token expiry. |
+| Empty/broken XML responses | `SPP_NAMESPACE` and `SPP_KEY` are not set correctly in `.env`. |
