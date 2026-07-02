@@ -6,13 +6,21 @@ function makeRes() {
   const headers: Record<string, string> = {};
   let statusCode = 200;
   let body: string | undefined;
+  let writeHeadCalled = false;
+  let writeHeadStatus: number | undefined;
 
   const res = {
     statusCode,
     headersSent: false,
     write: jest.fn(),
     end: jest.fn(),
-    status(code: number) { res.statusCode = code; return res; },
+    writeHead(code: number, hdrs?: any) {
+      writeHeadCalled = true;
+      writeHeadStatus = code;
+      res.statusCode = code;
+      if (hdrs) Object.assign(headers, hdrs);
+      return res;
+    },
     set(k: string, v: string) { headers[k] = v; return res; },
     json(data: any) {
       body = JSON.stringify(data);
@@ -22,6 +30,8 @@ function makeRes() {
     _headers: headers,
     _body: () => body,
     _status: () => res.statusCode,
+    _writeHeadCalled: () => writeHeadCalled,
+    _writeHeadStatus: () => writeHeadStatus,
   } as any;
   return res;
 }
@@ -136,5 +146,52 @@ describe('reauthRewriteMiddleware', () => {
     reauthRewriteMiddleware(req, res, next);
 
     expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles real Hono call sequence: writeHead → write(Uint8Array) → end()', () => {
+    const req = makeReq();
+    const res = makeRes();
+    const next = makeNext();
+
+    reauthRewriteMiddleware(req, res, next);
+
+    const body = mcpResult('AUTH_ERROR', true);
+    const encoded = new TextEncoder().encode(JSON.stringify(body));
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.write(new Uint8Array(encoded));
+    res.end();
+
+    expect(res._status()).toBe(401);
+    expect(res._headers['WWW-Authenticate']).toContain('Bearer realm="spp-mcp"');
+  });
+
+  it('passes through Uint8Array body for non-auth result', () => {
+    const req = makeReq();
+    const res = makeRes();
+    const next = makeNext();
+
+    reauthRewriteMiddleware(req, res, next);
+
+    const body = mcpResult('NOT_FOUND', true);
+    const encoded = new TextEncoder().encode(JSON.stringify(body));
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.write(new Uint8Array(encoded));
+    res.end();
+
+    expect(res._status()).toBe(200);
+    expect(res._headers['WWW-Authenticate']).toBeUndefined();
+  });
+
+  it('rewrites mixed batch (AUTH_ERROR + success) to 401', () => {
+    const batch = [
+      mcpResult('AUTH_ERROR', true),
+      mcpResult('SOME_TYPE', false),
+    ];
+    const { res } = runMiddleware(batch);
+
+    expect(res._status()).toBe(401);
+    expect(res._headers['WWW-Authenticate']).toContain('Bearer realm="spp-mcp"');
   });
 });

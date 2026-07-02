@@ -27,48 +27,75 @@ function isAuthErrorBody(body: string): boolean {
   }
 }
 
+function toBuffer(chunk: any): Buffer {
+  if (chunk == null) return Buffer.alloc(0);
+  if (Buffer.isBuffer(chunk)) return chunk;
+  if (chunk instanceof Uint8Array) return Buffer.from(chunk);
+  return Buffer.from(String(chunk));
+}
+
 export function reauthRewriteMiddleware(
   _req: Request,
   res: Response,
   next: NextFunction
 ): void {
   const chunks: Buffer[] = [];
-  const originalEnd = res.end.bind(res);
+  let capturedStatusCode: number | undefined;
+  let capturedHeaders: Record<string, string | string[] | number> | undefined;
+
+  const originalWriteHead = res.writeHead.bind(res);
   const originalWrite = res.write.bind(res);
+  const originalEnd = res.end.bind(res);
+
+  // Intercept writeHead — defer it so we can rewrite status/headers if needed
+  (res as any).writeHead = (statusCode: number, headersOrReason?: any, headers?: any): Response => {
+    capturedStatusCode = statusCode;
+    capturedHeaders = (typeof headersOrReason === 'object' && headersOrReason !== null)
+      ? headersOrReason
+      : headers;
+    return res;
+  };
 
   (res as any).write = (chunk: any): boolean => {
-    if (chunk != null) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-    }
+    const buf = toBuffer(chunk);
+    if (buf.length > 0) chunks.push(buf);
     return true;
   };
 
-  (res as any).end = (chunk?: any): Response => {
-    if (chunk != null) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-    }
+  (res as any).end = (chunk?: any, encoding?: any, callback?: any): Response => {
+    const buf = toBuffer(chunk);
+    if (buf.length > 0) chunks.push(buf);
 
+    res.writeHead = originalWriteHead;
     res.write = originalWrite;
     res.end = originalEnd;
 
     const body = Buffer.concat(chunks).toString('utf8');
+    const cb = typeof encoding === 'function' ? encoding : (typeof callback === 'function' ? callback : undefined);
 
     if (isAuthErrorBody(body)) {
       const challenge = buildBearerChallenge([
         'error="invalid_token"',
         'error_description="Access token rejected by upstream"',
       ]);
-      res
-        .status(401)
-        .set('WWW-Authenticate', challenge)
-        .json({
+      res.writeHead(401, {
+        'WWW-Authenticate': challenge,
+        'Content-Type': 'application/json',
+      });
+      res.end(
+        JSON.stringify({
           error: 'invalid_token',
           error_description: 'SPP access token was rejected. The client should refresh or re-authenticate.',
-        });
+        }),
+        cb,
+      );
       return res;
     }
 
-    originalEnd.call(res, body);
+    if (capturedStatusCode !== undefined) {
+      res.writeHead(capturedStatusCode, capturedHeaders ?? {});
+    }
+    res.end(body, cb);
     return res;
   };
 
