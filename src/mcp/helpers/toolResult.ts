@@ -6,6 +6,8 @@ import type { Tool, ToolResponse } from '../tools/types';
 import { SPPAuthError, SPPApiError, SPPResponseError, SPPBusinessError } from '../../clients/errors';
 import { SPPStatus } from '../../utils/errorCodes';
 
+export const AUTH_ERROR_TYPE = 'AUTH_ERROR' as const;
+
 /** Successful tool result. Returns both stringified text (for older clients) and
  *  the typed `structuredContent` payload (for MCP 2025-06-18 clients). */
 export function ok(structured: unknown): ToolResponse {
@@ -43,7 +45,7 @@ function classifySppError(code: string): { kind: string; hint: string } | null {
     case String(SPPStatus.AuthFailedRetry):
     case String(SPPStatus.InvalidUidSession):
       return {
-        kind: 'AUTH_ERROR',
+        kind: AUTH_ERROR_TYPE,
         hint: 'The SPP access token was rejected. Refresh the OAuth token and retry.',
       };
     // Permission / privilege
@@ -86,7 +88,7 @@ export function fail(error: unknown, hint?: { suggestion?: string; example?: unk
   const payload: Record<string, unknown> = { error: message };
 
   if (error instanceof SPPAuthError) {
-    payload.type = 'AUTH_ERROR';
+    payload.type = AUTH_ERROR_TYPE;
     payload.hint = 'The SPP access token was rejected. Refresh the OAuth token and retry.';
   } else if (error instanceof SPPApiError) {
     // Classify the SPP error code into a friendlier category so MCP clients
