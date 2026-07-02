@@ -19,6 +19,7 @@ import { callbackSppGetHandler } from './routes/callbackSpp';
 import { oauthTokenHandler } from './routes/oauthToken';
 import { oauthRegisterHandler } from './routes/oauthRegister';
 import { bearerAuthMiddleware } from './middleware/bearerAuth';
+import { reauthRewriteMiddleware } from './middleware/reauthRewrite';
 import { requestIdMiddleware } from './middleware/requestId';
 import { initializeMcpTransport } from './mcp/transport';
 
@@ -99,7 +100,7 @@ async function startServer() {
     const mcpRouter = await initializeMcpTransport();
 
     // Bearer auth applied to all /mcp routes (express normalizes trailing slash)
-    app.use('/mcp', bearerAuthMiddleware, mcpRouter);
+    app.use('/mcp', bearerAuthMiddleware, reauthRewriteMiddleware, mcpRouter);
     console.log('[MCP] Server mounted at /mcp');
 
     // ---- Error handler middleware (registered last so it catches all routes) ----
