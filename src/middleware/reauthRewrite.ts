@@ -71,6 +71,7 @@ export function reauthRewriteMiddleware(
     res.end = originalEnd;
 
     const body = Buffer.concat(chunks).toString('utf8');
+    const enc = typeof encoding === 'string' ? encoding : undefined;
     const cb = typeof encoding === 'function' ? encoding : (typeof callback === 'function' ? callback : undefined);
 
     if (isAuthErrorBody(body)) {
@@ -87,6 +88,7 @@ export function reauthRewriteMiddleware(
           error: 'invalid_token',
           error_description: 'SPP access token was rejected. The client should refresh or re-authenticate.',
         }),
+        enc,
         cb,
       );
       return res;
@@ -95,7 +97,7 @@ export function reauthRewriteMiddleware(
     if (capturedStatusCode !== undefined) {
       res.writeHead(capturedStatusCode, capturedHeaders ?? {});
     }
-    res.end(body, cb);
+    res.end(body, enc, cb);
     return res;
   };
 

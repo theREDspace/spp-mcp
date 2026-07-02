@@ -194,4 +194,18 @@ describe('reauthRewriteMiddleware', () => {
     expect(res._status()).toBe(401);
     expect(res._headers['WWW-Authenticate']).toContain('Bearer realm="spp-mcp"');
   });
+
+  it('preserves encoding argument on passthrough', () => {
+    const req = makeReq();
+    const res = makeRes();
+    const next = makeNext();
+
+    reauthRewriteMiddleware(req, res, next);
+
+    const body = mcpResult('NOT_FOUND', true);
+    res.end(JSON.stringify(body), 'utf8');
+
+    expect(res._status()).toBe(200);
+    expect(res._headers['WWW-Authenticate']).toBeUndefined();
+  });
 });
