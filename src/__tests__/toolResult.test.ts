@@ -13,13 +13,13 @@ describe('fail()', () => {
     const err = new SPPAuthError({ code: String(SPPStatus.AuthInvalid), message: 'expired' });
     const result = fail(err);
     expect(result.isError).toBe(true);
-    const payload = JSON.parse(result.content[0].text);
+    const payload = JSON.parse(result.content[0]!.text);
     expect(payload.type).toBe(AUTH_ERROR_TYPE);
   });
 
   it('does not set AUTH_ERROR type for generic errors', () => {
     const result = fail(new Error('something else'));
-    const payload = JSON.parse(result.content[0].text);
+    const payload = JSON.parse(result.content[0]!.text);
     expect(payload.type).not.toBe(AUTH_ERROR_TYPE);
   });
 });

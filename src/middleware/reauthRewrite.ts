@@ -71,7 +71,7 @@ export function reauthRewriteMiddleware(
     res.end = originalEnd;
 
     const body = Buffer.concat(chunks).toString('utf8');
-    const enc = typeof encoding === 'string' ? encoding : undefined;
+    const enc = (typeof encoding === 'string' ? encoding : 'utf8') as BufferEncoding;
     const cb = typeof encoding === 'function' ? encoding : (typeof callback === 'function' ? callback : undefined);
 
     if (isAuthErrorBody(body)) {
