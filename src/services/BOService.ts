@@ -1,14 +1,28 @@
 import SPPClient from "../clients/SPPClient";
 import { XmlBuilder } from "../utils/XmlBuilder";
 import type { BORecordMap, Wrapper, WrapperWithStatus } from "./BORecordMap";
-import { SPPStatus } from "../utils/errorCodes";
-import { SPPResponseError } from "../clients/errors";
+import { SPPStatus, SPPStatusInfo } from "../utils/errorCodes";
+import { SPPBusinessError, SPPResponseError } from "../clients/errors";
+import { DataExtractor, WriteBlockResult } from "../utils/DataExtractor";
 import { Logger } from "../utils/Logger";
 
 export interface UpdateResult {
   id: string | null; // The ID of the record attempted to delete
   status: string; // 'D' for deleted, '-1' for error, etc.
   errors?: { code: string; comment?: string; text?: string }[]; // Array of error details
+}
+
+/** Per-record outcome of a (possibly multi-record) write operation. */
+export interface WriteResult<T = any> {
+  /** Input id (update/delete) or the created record's id (add), when known. */
+  id: string | null;
+  /** Whether SPP reported success for this record. */
+  ok: boolean;
+  /** SPP status code as a string ('0' = success; delete success keeps 'D' for back-compat). */
+  status: string;
+  /** The record returned by SPP for this block, when present. */
+  record?: T | undefined;
+  errors?: { code: string; comment?: string; text?: string }[];
 }
 
 export interface CreateUserOptions {
@@ -133,26 +147,104 @@ export class BOService {
     return results[0];
   }
 
+  /**
+   * Turn one parsed write block into a per-record result, zipped with the
+   * caller's input id. A missing block (SPP returned fewer blocks than we sent
+   * commands) is reported as a failure rather than assumed successful.
+   */
+  private static toWriteResult<T>(
+    block: WriteBlockResult | undefined,
+    inputId: string | null,
+    successStatus = "0"
+  ): WriteResult<T> {
+    if (!block) {
+      return {
+        id: inputId,
+        ok: false,
+        status: String(SPPStatus.UnknownError),
+        errors: [
+          {
+            code: String(SPPStatus.UnknownError),
+            text: "SPP returned no response block for this record",
+          },
+        ],
+      };
+    }
+    if (block.status === SPPStatus.Success) {
+      const record = block.record as T | undefined;
+      const recordId = (record as any)?.id != null ? String((record as any).id) : null;
+      return { id: inputId ?? recordId, ok: true, status: successStatus, record };
+    }
+    return {
+      id: inputId,
+      ok: false,
+      status: String(block.status),
+      record: block.record as T | undefined,
+      errors: [
+        {
+          code: String(block.status),
+          text:
+            block.errorMessage ??
+            SPPStatusInfo[block.status as SPPStatus]?.description ??
+            `SPP write failed with status ${block.status}`,
+        },
+      ],
+    };
+  }
+
+  /** Throw the classified SPP error for a failed single-record write. */
+  private static throwWriteError(result: WriteResult, operation: string): never {
+    const code = Number(result.status);
+    throw new SPPBusinessError(code as SPPStatus, {
+      code: result.status,
+      message:
+        result.errors?.[0]?.text ??
+        `SPP ${operation} failed with status ${result.status}`,
+    });
+  }
+
+  async add<BO extends keyof BORecordMap>(
+    bo: BO,
+    payload: Partial<BORecordMap[BO]>
+  ): Promise<BORecordMap[BO]>;
+  async add<BO extends keyof BORecordMap>(
+    bo: BO,
+    payload: Partial<BORecordMap[BO]>[]
+  ): Promise<WriteResult<BORecordMap[BO]>[]>;
   async add<BO extends keyof BORecordMap>(
     bo: BO,
     payload: Partial<BORecordMap[BO]> | Partial<BORecordMap[BO]>[]
-  ): Promise<BORecordMap[BO] | BORecordMap[BO][]> {
+  ): Promise<BORecordMap[BO] | WriteResult<BORecordMap[BO]>[]> {
     const isArray = Array.isArray(payload);
     const payloads = isArray ? payload : [payload];
     const xml = XmlBuilder.buildAdd(String(bo), payloads);
-    const wrappers = await this.client.callSPPXML<Wrapper<BO>>(xml);
-    const results = wrappers.map((w) =>
-      bo in w ? ((w as any)[bo] as BORecordMap[BO]) : (w as BORecordMap[BO])
+    const response = await this.client.callSPPXMLParsed(xml);
+    const blocks = DataExtractor.extractWriteResults(response, ["Add"]);
+    const results = payloads.map((_, i) =>
+      BOService.toWriteResult<BORecordMap[BO]>(blocks[i], null)
     );
-    // Return a single object if input was a single object, else return array
-    return isArray ? results : results[0];
+
+    if (isArray) return results;
+    // Single-record contract: return the record on success, throw on failure.
+    const [result] = results;
+    if (!result!.ok) BOService.throwWriteError(result!, "add");
+    return result!.record as BORecordMap[BO];
   }
 
   async update<BO extends keyof BORecordMap>(
     bo: BO,
+    id: string,
+    changes: Partial<BORecordMap[BO]>
+  ): Promise<BORecordMap[BO]>;
+  async update<BO extends keyof BORecordMap>(
+    bo: BO,
+    updates: { id: string; changes: Partial<BORecordMap[BO]> }[]
+  ): Promise<WriteResult<BORecordMap[BO]>[]>;
+  async update<BO extends keyof BORecordMap>(
+    bo: BO,
     idOrUpdates: string | { id: string; changes: Partial<BORecordMap[BO]> }[],
     changes?: Partial<BORecordMap[BO]>
-  ): Promise<BORecordMap[BO] | BORecordMap[BO][]> {
+  ): Promise<BORecordMap[BO] | WriteResult<BORecordMap[BO]>[]> {
     let updates: { id: string; changes: Partial<BORecordMap[BO]> }[];
     let isArray: boolean;
 
@@ -166,64 +258,49 @@ export class BOService {
     }
 
     const xml = XmlBuilder.buildUpdate(String(bo), updates);
-    const wrappers = await this.client.callSPPXML<Wrapper<BO>>(xml);
-    const results = wrappers.map((w) =>
-      bo in w ? ((w as any)[bo] as BORecordMap[BO]) : (w as BORecordMap[BO])
+    const response = await this.client.callSPPXMLParsed(xml);
+    const blocks = DataExtractor.extractWriteResults(response, ["Modify"]);
+    const results = updates.map((u, i) =>
+      BOService.toWriteResult<BORecordMap[BO]>(blocks[i], u.id)
     );
-    return isArray ? results : results[0];
+
+    if (isArray) return results;
+    const [result] = results;
+    if (!result!.ok) BOService.throwWriteError(result!, "update");
+    return result!.record as BORecordMap[BO];
   }
 
   async delete<BO extends keyof BORecordMap>(
     bo: BO,
+    ids: string
+  ): Promise<WriteResult[]>;
+  async delete<BO extends keyof BORecordMap>(
+    bo: BO,
+    ids: string[]
+  ): Promise<WriteResult[]>;
+  async delete<BO extends keyof BORecordMap>(
+    bo: BO,
     ids: string | string[]
-  ): Promise<UpdateResult[]> {
-    const idsToDelete = Array.isArray(ids) ? ids : [ids];
-    let response: any;
-    try {
-      const xml = XmlBuilder.buildDelete(String(bo), idsToDelete);
-      response = await this.client.callSPPXML<any>(xml);
-    } catch (err: any) {
-      Logger.error('BOService', `Error calling delete for ${bo}:`, err);
-      const failResult: UpdateResult = {
-        id: "",
-        status: "-1",
-        errors: [
-          {
-            code: err.code ?? "CLIENT_ERROR",
-            comment: err.message,
-            text: err.detail?.message ?? err.message,
-          },
-        ],
-      };
-      // mark *all* as failed
-      return idsToDelete.map((id) => ({ ...failResult, id }));
+  ): Promise<WriteResult[]> {
+    const isArray = Array.isArray(ids);
+    const idsToDelete = isArray ? ids : [ids];
+
+    // Transport/auth/build errors propagate — fabricating per-record failure
+    // results here would hide the real error class (and, worse, could report
+    // failure for a delete SPP actually performed).
+    const xml = XmlBuilder.buildDelete(String(bo), idsToDelete);
+    const response = await this.client.callSPPXMLParsed(xml);
+    const blocks = DataExtractor.extractWriteResults(response, ["Delete"]);
+    const results = idsToDelete.map((id, i) =>
+      // 'D' kept as the delete success marker for back-compat with UpdateResult.
+      BOService.toWriteResult(blocks[i], id, "D")
+    );
+
+    if (!isArray) {
+      const [result] = results;
+      if (!result!.ok) BOService.throwWriteError(result!, "delete");
     }
-    // extract the status object (first element if array)
-    const statusObj = Array.isArray(response) ? response[0] : response;
-    const codeNum = Number(statusObj.status);
-    const succeeded = codeNum === SPPStatus.Success;
-    // build a uniform UpdateResult for each ID
-    return idsToDelete.map((id) => {
-      if (succeeded) {
-        return { id, status: "D" };
-      }
-      // parse any errors into an array form
-      const errs: UpdateResult["errors"] = [];
-      const rawErr = statusObj.errors;
-      if (rawErr) {
-        if (Array.isArray(rawErr)) errs.push(...(rawErr as any));
-        else if (typeof rawErr === "object") errs.push(rawErr as any);
-        else if (typeof rawErr === "string")
-          errs.push({ code: codeNum.toString(), text: rawErr });
-      } else {
-        errs.push({
-          code: codeNum.toString(),
-          text: `Delete failed with status ${codeNum}`,
-          comment: statusObj.comment,
-        });
-      }
-      return { id, status: "-1", errors: errs };
-    });
+    return results;
   }
 
   // ─── CREATE USER ──────────────────────────────────────────────────

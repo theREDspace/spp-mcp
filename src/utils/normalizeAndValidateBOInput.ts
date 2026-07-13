@@ -3,6 +3,11 @@ import { getSchema } from '../services/registry';
 
 type InputContext = 'payload' | 'changes' | 'filter' | 'id';
 
+// Server-generated fields must never be *required* on add payloads, even when a
+// registry entry lists them as required (they describe records read back from
+// SPP, not records being created). They remain accepted as optional.
+const SERVER_GENERATED_FIELDS = new Set(['id', 'created', 'updated']);
+
 export function buildZodSchemaForBO(objectType: string, context: InputContext): ZodObject<any> {
   const boSchema = getSchema(objectType);
 
@@ -46,7 +51,9 @@ export function buildZodSchemaForBO(objectType: string, context: InputContext): 
 
     if (context === 'payload' && isCurated) {
       // Use unified check: field is required if in boSchema.requiredFields or field.required
-      const isReq = boSchema.requiredFields?.includes(field.name) || field.required;
+      const isReq =
+        (boSchema.requiredFields?.includes(field.name) || field.required) &&
+        !SERVER_GENERATED_FIELDS.has(field.name);
       fieldMap[field.name] = isReq ? zType : zType.optional();
     } else {
       fieldMap[field.name] = zType.optional();
