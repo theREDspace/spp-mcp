@@ -151,6 +151,13 @@ export class BOService {
    * Turn one parsed write block into a per-record result, zipped with the
    * caller's input id. A missing block (SPP returned fewer blocks than we sent
    * commands) is reported as a failure rather than assumed successful.
+   *
+   * Blocks are matched to inputs positionally (document order) — SPP doesn't
+   * echo a correlation id, so if it ever returned blocks in a different order
+   * or count than requested, a status could get misattributed to the wrong
+   * record. Modify/Add success blocks do echo the record id, so when we have
+   * an expected id (update) we cross-check it against the block's and refuse
+   * to report success on a mismatch rather than silently trusting position.
    */
   private static toWriteResult<T>(
     block: WriteBlockResult | undefined,
@@ -173,6 +180,20 @@ export class BOService {
     if (block.status === SPPStatus.Success) {
       const record = block.record as T | undefined;
       const recordId = (record as any)?.id != null ? String((record as any).id) : null;
+      if (inputId != null && recordId != null && recordId !== inputId) {
+        return {
+          id: inputId,
+          ok: false,
+          status: String(SPPStatus.UnknownError),
+          record,
+          errors: [
+            {
+              code: "ID_MISMATCH",
+              text: `Response block at this position echoed id ${recordId}, expected ${inputId} — response order may not match the request, so this result is not trusted`,
+            },
+          ],
+        };
+      }
       return { id: inputId ?? recordId, ok: true, status: successStatus, record };
     }
     return {

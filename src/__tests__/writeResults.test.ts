@@ -131,6 +131,22 @@ describe('BOService write results', () => {
       expect(results[0]!.id).toBe('1');
       expect(results[1]!.status).toBe('601');
     });
+
+    it('bulk: reports an echoed-id mismatch as a failure instead of misattributing status', async () => {
+      // Simulates SPP returning a success block out of order/position — the
+      // block at index 0 echoes id '2', not the '1' we expect there.
+      const svc = new BOService(
+        mockClient({ Modify: [{ status: '0', User: { id: '2' } }, { status: '0', User: { id: '1' } }] })
+      );
+      const results = await svc.update('User', [
+        { id: '1', changes: { name: 'a' } as any },
+        { id: '2', changes: { name: 'b' } as any },
+      ]);
+      expect(results[0]).toMatchObject({ id: '1', ok: false });
+      expect(results[0]!.errors?.[0]?.code).toBe('ID_MISMATCH');
+      expect(results[1]).toMatchObject({ id: '2', ok: false });
+      expect(results[1]!.errors?.[0]?.code).toBe('ID_MISMATCH');
+    });
   });
 
   describe('add', () => {
