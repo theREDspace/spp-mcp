@@ -4,6 +4,7 @@ import genericBatchList from './genericBatchList';
 import genericAdd from './genericAdd';
 import genericUpdate from './genericUpdate';
 import genericDelete from './genericDelete';
+import moveHierarchyRecords from './moveHierarchyRecords';
 import listObjectTypes from './listObjectTypes';
 import describeObjectType from './describeObjectType';
 import echo from './echo';
@@ -24,6 +25,8 @@ export const mcpTools: Tool[] = [
   genericAdd,
   genericUpdate,
   genericDelete,
+  // Composite operations
+  moveHierarchyRecords,
   // Utility
   whoami,
   getUserProfile,

@@ -25,6 +25,10 @@ export const boFieldsArraySchema = z
   .array(boFieldsSchema)
   .describe('Array of filter objects, one per parallel query.');
 
+/** Maximum records accepted per bulk write call. Keeps a single SPP request
+ *  well under SPP's batch limits and the tool response at a manageable size. */
+export const MAX_WRITE_BATCH = 100;
+
 export const errorResponseSchema = z
   .object({
     error: z.string().optional(),
@@ -45,6 +49,10 @@ export const crudOutputSchema = z
     data: z.any().optional(),
     count: z.number().optional(),
     message: z.string().optional(),
+    // Bulk-write fields: per-record outcomes plus summary counts.
+    results: z.array(z.any()).optional(),
+    succeeded: z.number().optional(),
+    failed: z.number().optional(),
     // Error-path fields (from fail() helper)
     error: z.string().optional(),
     type: z.string().optional(),

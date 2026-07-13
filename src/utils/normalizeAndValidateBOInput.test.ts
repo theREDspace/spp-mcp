@@ -88,6 +88,35 @@ describe('normalizeAndValidateBOInput — curated BO regression', () => {
   });
 });
 
+describe('normalizeAndValidateBOInput — merged curated schemas (incident regression)', () => {
+  it('accepts hierarchy_node_ids in User changes (was rejected by the 5-field curated stub)', () => {
+    const result = normalizeAndValidateBOInput('User', { hierarchy_node_ids: 18 }, 'changes');
+    expect(result.hierarchy_node_ids).toBe('18');
+  });
+
+  it('accepts nickname in User filter (curated filterExample used it but the stub rejected it)', () => {
+    const result = normalizeAndValidateBOInput('User', { active: 1, nickname: 'bob' }, 'filter');
+    expect(result.nickname).toBe('bob');
+  });
+
+  it('still rejects genuinely unknown fields on merged User (strict typo-catching)', () => {
+    expect(() =>
+      normalizeAndValidateBOInput('User', { hierrarchy_node_ids: '18' }, 'changes')
+    ).toThrow();
+  });
+
+  it('does not require server-generated fields (id/created/updated) on add payloads', () => {
+    // Curated User requiredFields include 'id'; creating a user must not demand one.
+    expect(() =>
+      normalizeAndValidateBOInput('User', { name: 'Bob', externalid: 'ext42' }, 'payload')
+    ).not.toThrow();
+  });
+
+  it('still enforces genuinely required fields on add payloads', () => {
+    expect(() => normalizeAndValidateBOInput('User', { name: 'Bob' }, 'payload')).toThrow();
+  });
+});
+
 describe('normalizeIdForBO — passthrough BO', () => {
   it('resolves id field for passthrough BO', () => {
     const result = normalizeIdForBO('UnknownBOXYZ', { id: 'X123' });

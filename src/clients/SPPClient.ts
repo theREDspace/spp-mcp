@@ -6,7 +6,7 @@ import { XMLParser } from "fast-xml-parser";
 import { SPPErrorDetail, SPPRequestError, SPPAuthError, SPPResponseError, SPPApiError, SPPBusinessError } from "./errors";
 import { SPPStatus, SPPStatusInfo } from "../utils/errorCodes";
 import { BORecordMap } from "../services/BORecordMap";
-import { BOService, CreateUserOptions } from "../services/BOService";
+import { BOService, CreateUserOptions, WriteResult } from "../services/BOService";
 import { User } from "../types/User";
 import { Company } from "../types/Company";
 import { XmlBuilder } from "../utils/XmlBuilder";
@@ -109,7 +109,14 @@ class SPPClient {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    <request API_version="1.0" client_ver="1.1" namespace="${ns}" key="${key}">\n      <Auth><Login><access_token>${tok}</access_token></Login></Auth>\n      ${query}\n    </request>`;
   }
 
-  async callSPPXML<T = any>(rawXml: string): Promise<T[]> {
+  /**
+   * Send a raw SPP XML command and return the parsed `<response>` node without
+   * interpreting business statuses. Write paths use this together with
+   * `DataExtractor.extractWriteResults` so per-block statuses stay data instead
+   * of being converted into thrown exceptions. Transport and auth failures
+   * still throw.
+   */
+  async callSPPXMLParsed(rawXml: string): Promise<any> {
     if (!this.accessToken) {
       throw new SPPAuthError({
         code: SPPStatus.AuthInvalid.toString(),
@@ -154,9 +161,23 @@ class SPPClient {
       });
     }
 
+    return parsed.response;
+  }
+
+  async callSPPXML<T = any>(rawXml: string): Promise<T[]> {
+    const response = await this.callSPPXMLParsed(rawXml);
+
     try {
-      return DataExtractor.extractData(parsed.response) as T[];
+      return DataExtractor.extractData(response) as T[];
     } catch (extractErr: any) {
+      // extractData throws already-classified SPP errors (SPPAuthError,
+      // SPPBusinessError with the real SPP status code). Re-wrapping those
+      // into a generic SPPResponseError would erase the code and break
+      // downstream classification — pass them through untouched.
+      if (extractErr instanceof SPPApiError) {
+        this.onError(extractErr);
+        throw extractErr;
+      }
       const detail: SPPErrorDetail = {
         code: SPPStatus.UnknownError.toString(),
         message: extractErr.message || "Unknown error in extractData()",
@@ -196,24 +217,41 @@ class SPPClient {
 
   add<BO extends keyof BORecordMap>(
     bo: BO,
+    payload: Partial<BORecordMap[BO]>
+  ): Promise<BORecordMap[BO]>;
+  add<BO extends keyof BORecordMap>(
+    bo: BO,
+    payload: Partial<BORecordMap[BO]>[]
+  ): Promise<WriteResult<BORecordMap[BO]>[]>;
+  add<BO extends keyof BORecordMap>(
+    bo: BO,
     payload: Partial<BORecordMap[BO]> | Partial<BORecordMap[BO]>[]
-  ): Promise<BORecordMap[BO][]> {
-    return this.boService.add(bo, payload);
+  ): Promise<BORecordMap[BO] | WriteResult<BORecordMap[BO]>[]> {
+    return this.boService.add(bo, payload as any);
   }
 
   update<BO extends keyof BORecordMap>(
     bo: BO,
+    id: string,
+    changes: Partial<BORecordMap[BO]>
+  ): Promise<BORecordMap[BO]>;
+  update<BO extends keyof BORecordMap>(
+    bo: BO,
+    updates: { id: string; changes: Partial<BORecordMap[BO]> }[]
+  ): Promise<WriteResult<BORecordMap[BO]>[]>;
+  update<BO extends keyof BORecordMap>(
+    bo: BO,
     idOrUpdates: string | { id: string; changes: Partial<BORecordMap[BO]> }[],
     changes?: Partial<BORecordMap[BO]>
-  ): Promise<BORecordMap[BO] | BORecordMap[BO][]> {
-    return this.boService.update(bo, idOrUpdates, changes);
+  ): Promise<BORecordMap[BO] | WriteResult<BORecordMap[BO]>[]> {
+    return this.boService.update(bo, idOrUpdates as any, changes as any);
   }
 
   delete<BO extends keyof BORecordMap>(
     bo: BO,
     id: string | string[]
-  ): Promise<BORecordMap[BO][]> {
-    return this.boService.delete(bo, id);
+  ): Promise<WriteResult[]> {
+    return this.boService.delete(bo, id as any);
   }
 
   /**
