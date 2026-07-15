@@ -48,5 +48,8 @@ export function oauthAuthorizationServerHandler(_req: Request, res: Response) {
     grant_types_supported: ['authorization_code', 'refresh_token'],
     scopes_supported: ['xml', 'rest'],
     token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+    // PKCE is terminated at this proxy (see oauthAuthorize/oauthToken); required
+    // advertisement per MCP spec 2025-11-25.
+    code_challenge_methods_supported: ['S256'],
   });
 }
