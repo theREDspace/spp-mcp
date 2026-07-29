@@ -32,6 +32,9 @@ npx jest path/to/file.test.ts  # Single test file
    - `APP_BASE_URL` — Public server URL for MCP clients
    - `SPP_NAMESPACE`, `SPP_KEY` — Required for SPP API calls
    - `REGISTRATION_SECRET` — Optional, recommended for public `/oauth/register`
+   - `MCP_LEGACY` — `serve` (default) or `reject`. Controls whether `/mcp` still serves clients using the pre-2026-07-28 `initialize` handshake alongside modern clients. Flip to `reject` only once logs show no legacy-era traffic (the server logs every legacy-served request).
+   - `ALLOWED_ORIGIN_HOSTS` — comma-separated hostnames (no scheme/port) for `Origin` header validation on `/mcp`, per MCP's DNS-rebinding-protection requirement. Leave unset to skip this check (development default).
+   - `CIMD_ALLOWED_HOSTS` — optional comma-separated hostname allowlist restricting which hosts `/oauth/authorize` and `/oauth/token` will fetch Client ID Metadata Documents from. Leave unset to allow any `https` host, subject to the built-in SSRF blocking (private/loopback/link-local ranges are always rejected regardless of this setting).
 
 2. Create a SuiteProjects Pro API Integration app and register the callback URL
 
@@ -71,6 +74,10 @@ Point to `https://your-ngrok-domain/mcp` with OAuth auth.
 - Each tool is a standalone module: `listProjects.ts`, `addTimeEntry.ts`, etc.
 - `src/mcp/tools/index.ts` — Tool registry
 - `src/mcp/tools/types.ts` — Shared types and response structures
+
+### Protocol Revision
+
+`/mcp` serves MCP protocol revision `2026-07-28` (modern, stateless, per-request `_meta` envelope) and the legacy `initialize`-handshake era side by side on the same endpoint, routed in `src/mcp/transport.ts` by the SDK's `isLegacyRequest()` classifier. Both legs share one server-construction factory (`buildServer()` in that file) so tools, resources, capabilities, and cache hints can never drift between eras. See `MCP_LEGACY` above for how legacy support is eventually retired.
 
 **Services** — `src/services/`
 - Business logic for projects, bookings, users, timesheets, time entries
