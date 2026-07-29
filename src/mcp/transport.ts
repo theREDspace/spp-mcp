@@ -133,13 +133,20 @@ export async function initializeMcpTransport() {
   });
 
   router.delete('/', (_req: ExpressRequest, res: Response) => {
-    const config = loadConfig();
-    if (config.MCP_LEGACY === 'serve') {
-      // Legacy no-op: client signals end of session (stateless mode ignores it).
-      res.status(200).end();
-      return;
+    try {
+      const config = loadConfig();
+      if (config.MCP_LEGACY === 'serve') {
+        // Legacy no-op: client signals end of session (stateless mode ignores it).
+        res.status(200).end();
+        return;
+      }
+      res.status(405).json({ error: 'method_not_allowed' });
+    } catch (err) {
+      Logger.error('MCP', 'DELETE error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
     }
-    res.status(405).json({ error: 'method_not_allowed' });
   });
 
   // GET /mcp is never served in either era: legacy never exposed SSE-over-GET
