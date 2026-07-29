@@ -23,6 +23,21 @@ jest.mock('node:dns/promises', () => ({
   }),
 }));
 
+// Production code calls undici's own `fetch` (not the global) because
+// `dispatcher` — which pins the connection to the SSRF-validated IP — is a
+// documented, typed option there and only an unspecified extension on the
+// global. Keep the real `Agent` so the pinning dispatcher is still genuinely
+// constructed and closed, and route undici's `fetch` to whatever
+// `global.fetch` currently is, so the per-test spies below still drive the
+// module under test.
+jest.mock('undici', () => {
+  const actual = jest.requireActual('undici');
+  return {
+    ...actual,
+    fetch: (...args: unknown[]) => (globalThis.fetch as unknown as (...a: unknown[]) => unknown)(...args),
+  };
+});
+
 import { lookup as mockedLookup } from 'node:dns/promises';
 import { resolveCimdClient, _resetCimdCacheForTests } from '../routes/cimd';
 

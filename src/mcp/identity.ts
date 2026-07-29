@@ -12,11 +12,30 @@
 // assumes cwd = repo root elsewhere in this codebase (e.g. clientRegistry.ts's
 // default CLIENT_REGISTRY_PATH of 'data/clients.json').
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
+/**
+ * Walk up from `process.cwd()` looking for package.json, rather than assuming
+ * cwd IS the repo root. A bare `resolve(cwd, 'package.json')` breaks under a
+ * cwd that isn't the project root (systemd `WorkingDirectory=`, a container
+ * entrypoint, or running a script from a subdirectory) — the upward walk costs
+ * nothing and removes that assumption.
+ */
 function readPkgFallback(): { name: string; version: string } {
-  const pkgPath = resolve(process.cwd(), 'package.json');
-  return JSON.parse(readFileSync(pkgPath, 'utf8')) as { name: string; version: string };
+  let dir = process.cwd();
+  for (;;) {
+    try {
+      const raw = readFileSync(resolve(dir, 'package.json'), 'utf8');
+      return JSON.parse(raw) as { name: string; version: string };
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) break; // reached the filesystem root
+      dir = parent;
+    }
+  }
+  // Callers fall back to the literal defaults below; never throw here, since
+  // server identity is cosmetic metadata and must not prevent startup.
+  return { name: '', version: '0.0.0' };
 }
 
 const injectedName = process.env.SPP_MCP_PKG_NAME;

@@ -49,14 +49,39 @@ export function reauthRewriteMiddleware(
 
   let isEventStream = false;
 
+  /**
+   * True when the response is (or is becoming) an SSE stream, which must never
+   * be buffered — buffering an open stream hangs the request forever.
+   *
+   * Checks BOTH sources deliberately. The headers handed to `writeHead` are the
+   * path the MCP SDK's Node adapter currently takes, but Node also permits
+   * `res.setHeader('Content-Type', …)` followed by `res.write(…)` with no
+   * explicit `writeHead` (headers are then sent implicitly on first write). In
+   * that shape `capturedHeaders` is never populated, so relying on it alone
+   * would silently buffer the stream. `subscriptions/listen` is served over SSE
+   * regardless of `responseMode: 'json'`, so this path is reachable.
+   */
+  const detectEventStream = (): boolean => {
+    const fromWriteHead = capturedHeaders?.['Content-Type'] ?? capturedHeaders?.['content-type'];
+    if (typeof fromWriteHead === 'string' && fromWriteHead.startsWith('text/event-stream')) return true;
+    const fromSetHeader = typeof res.getHeader === 'function' ? res.getHeader('content-type') : undefined;
+    return typeof fromSetHeader === 'string' && fromSetHeader.startsWith('text/event-stream');
+  };
+
+  /** Stop intercepting and hand control back to Node's real methods. */
+  const restoreOriginals = (): void => {
+    res.writeHead = originalWriteHead;
+    res.write = originalWrite;
+    res.end = originalEnd;
+  };
+
   // Intercept writeHead — defer it so we can rewrite status/headers if needed
   (res as any).writeHead = (statusCode: number, headersOrReason?: any, headers?: any): Response => {
     capturedStatusCode = statusCode;
     capturedHeaders = (typeof headersOrReason === 'object' && headersOrReason !== null)
       ? headersOrReason
       : headers;
-    const contentType = capturedHeaders?.['Content-Type'] ?? capturedHeaders?.['content-type'];
-    if (typeof contentType === 'string' && contentType.startsWith('text/event-stream')) {
+    if (detectEventStream()) {
       isEventStream = true;
       originalWriteHead(statusCode, capturedHeaders);
     }
@@ -64,6 +89,17 @@ export function reauthRewriteMiddleware(
   };
 
   (res as any).write = (chunk: any): boolean => {
+    // Re-check on first write: the Content-Type may have been set via
+    // setHeader() with no writeHead() call, in which case writeHead's check
+    // never ran and buffering here would hang an SSE stream.
+    if (!isEventStream && detectEventStream()) {
+      isEventStream = true;
+      restoreOriginals();
+      // Flush anything already buffered, in order, before this chunk.
+      for (const buffered of chunks) originalWrite(buffered);
+      chunks.length = 0;
+      return originalWrite(chunk);
+    }
     if (isEventStream) return originalWrite(chunk);
     const buf = toBuffer(chunk);
     if (buf.length > 0) chunks.push(buf);
@@ -71,19 +107,15 @@ export function reauthRewriteMiddleware(
   };
 
   (res as any).end = (chunk?: any, encoding?: any, callback?: any): Response => {
-    if (isEventStream) {
-      res.writeHead = originalWriteHead;
-      res.write = originalWrite;
-      res.end = originalEnd;
+    if (isEventStream || detectEventStream()) {
+      restoreOriginals();
       return originalEnd(chunk, encoding, callback);
     }
 
     const buf = toBuffer(chunk);
     if (buf.length > 0) chunks.push(buf);
 
-    res.writeHead = originalWriteHead;
-    res.write = originalWrite;
-    res.end = originalEnd;
+    restoreOriginals();
 
     const body = Buffer.concat(chunks).toString('utf8');
     const enc = (typeof encoding === 'string' ? encoding : 'utf8') as BufferEncoding;

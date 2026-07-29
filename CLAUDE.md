@@ -33,7 +33,7 @@ npx jest path/to/file.test.ts  # Single test file
    - `SPP_NAMESPACE`, `SPP_KEY` — Required for SPP API calls
    - `REGISTRATION_SECRET` — Optional, but **strongly recommended for any reachable deployment**. Leaving it unset makes `/oauth/register` an open endpoint, so anyone can mint valid proxy client credentials. Obtaining such credentials is step one of several authorization-code interception chains, so treat "unset" as development-only.
    - `MCP_LEGACY` — `serve` (default) or `reject`. Controls whether `/mcp` still serves clients using the pre-2026-07-28 `initialize` handshake alongside modern clients. Flip to `reject` only once logs show no legacy-era traffic (the server logs every legacy-served request).
-   - `ALLOWED_ORIGIN_HOSTS` — comma-separated hostnames (no scheme/port) for `Origin` header validation on `/mcp`, per MCP's DNS-rebinding-protection requirement. Leave unset to skip this check (development default).
+   - `ALLOWED_ORIGIN_HOSTS` — comma-separated hostnames (no scheme/port) for `Origin` header validation on `/mcp`, per MCP's DNS-rebinding-protection requirement. **Defaults to `APP_BASE_URL`'s host** when unset, so the protection is on by default; validation is skipped entirely (with a startup warning) only when neither is set. Non-browser MCP clients send no `Origin` and always pass — set this explicitly if a browser-based client is served from a different origin.
    - `CIMD_ALLOWED_HOSTS` — optional comma-separated hostname allowlist restricting which hosts `/oauth/authorize` and `/oauth/token` will fetch Client ID Metadata Documents from. Leave unset to allow any `https` host, subject to the built-in SSRF blocking (private/loopback/link-local ranges are always rejected regardless of this setting).
 
 2. Create a SuiteProjects Pro API Integration app and register the callback URL
@@ -81,11 +81,13 @@ Point to `https://your-ngrok-domain/mcp` with OAuth auth.
 
 ### OAuth Proxy Requirements
 
-The proxy enforces these on every authorization-code flow. All are mandated by OAuth 2.1 / the MCP authorization spec, so a conforming MCP client already satisfies them — but a hand-rolled client that skipped any of them will now get a `400` where it previously succeeded:
+> **Compatibility break — OAuth proxy only.** The dual-era `/mcp` transport is backward compatible; **the OAuth proxy is not.** The requirements below are new hard `400`s. A client that previously completed authorization by omitting `client_id`, `state`, or `code_challenge` will now fail at `/oauth/authorize`, and a DCR client whose `redirect_uri` was never registered will fail there too. All are mandated by OAuth 2.1 / the MCP authorization spec, so conforming MCP clients are unaffected — but this belongs in release notes.
+
+The proxy enforces these on every authorization-code flow:
 
 - **PKCE is required for every client**, not just secret-less CIMD ones. `code_challenge` is mandatory at `/oauth/authorize` and verified at `/oauth/token`. Only `S256` is accepted (`plain` is rejected outright — its challenge travels in a GET query string, so a leaked challenge is a leaked verifier).
 - **`client_id` and `state` are required** at `/oauth/authorize`. Both are load-bearing: `state` carries the PKCE challenge and the client binding through to the callback, and without `client_id` the code cannot be bound to a client at all.
-- **`redirect_uri` must be pre-registered** and is matched for both CIMD and DCR clients. It must be an absolute `https` URL, or `http` on loopback only (`localhost`, `127.0.0.1`, `[::1]`) per RFC 8252 — validated by the single shared `src/routes/redirectUri.ts` used by both registration paths.
+- **`redirect_uri` must be pre-registered** and is matched for both CIMD and DCR clients. Accepted forms (single shared validator, `src/routes/redirectUri.ts`, used by both registration paths): absolute `https`; `http` on loopback only (`localhost`, `127.0.0.1`, `[::1]`) per RFC 8252 §7.3; and private-use schemes such as `cursor://…` or `com.example.app:/oauth` per RFC 8252 §7.1, which is what most native/desktop MCP clients use. Script- and local-resource schemes (`javascript:`, `data:`, `file:`, `blob:`, …) are rejected.
 - **A code with no server-side binding is never redeemable.** `codeBindings` entries expire after 10 minutes; a code whose binding is missing or expired is rejected rather than being treated as unconstrained. Consequently `/callback/spp` refuses to relay a `code` when its `state` entry is gone (e.g. lost across a restart) — the client must restart the flow. `SPP_FORWARD_CALLBACK_URL` still relays SPP *error* responses, which carry no credential.
 
 **Services** — `src/services/`

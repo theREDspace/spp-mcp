@@ -22,6 +22,17 @@ function makeRes() {
       return res;
     },
     set(k: string, v: string) { headers[k] = v; return res; },
+    // Node's real ServerResponse header API. setHeader/getHeader are
+    // case-insensitive on the wire, and getHeader lowercases its lookup, so
+    // model that rather than a plain object read.
+    setHeader(k: string, v: string) { headers[k] = v; return res; },
+    getHeader(k: string) {
+      const target = k.toLowerCase();
+      for (const [hk, hv] of Object.entries(headers)) {
+        if (hk.toLowerCase() === target) return hv;
+      }
+      return undefined;
+    },
     json(data: any) {
       body = JSON.stringify(data);
       res.end(body);
@@ -205,6 +216,36 @@ describe('reauthRewriteMiddleware', () => {
     const body = mcpResult('NOT_FOUND', true);
     res.end(JSON.stringify(body), 'utf8');
 
+    expect(res._status()).toBe(200);
+    expect(res._headers['WWW-Authenticate']).toBeUndefined();
+  });
+
+  it('detects SSE set via setHeader() with no writeHead() call and does not buffer', () => {
+    // Node allows res.setHeader('Content-Type', …) followed by res.write(…)
+    // with no explicit writeHead — headers go out implicitly on first write.
+    // In that shape the writeHead interceptor never runs, so detection has to
+    // also consult res.getHeader(); otherwise this buffers an unbounded SSE
+    // stream and the request hangs. `subscriptions/listen` is served over SSE
+    // regardless of responseMode: 'json', so this path is reachable.
+    const req = makeReq();
+    const res = makeRes();
+    const next = makeNext();
+
+    const written: any[] = [];
+    res.write = jest.fn((chunk: any) => {
+      written.push(chunk);
+      return true;
+    });
+
+    reauthRewriteMiddleware(req, res, next);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.write(': keep-alive\n\n');
+    res.write('data: {"jsonrpc":"2.0"}\n\n');
+    res.end();
+
+    // Passed straight through to the real write, never accumulated.
+    expect(written).toEqual([': keep-alive\n\n', 'data: {"jsonrpc":"2.0"}\n\n']);
     expect(res._status()).toBe(200);
     expect(res._headers['WWW-Authenticate']).toBeUndefined();
   });

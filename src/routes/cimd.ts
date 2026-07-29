@@ -15,7 +15,12 @@
  * apply a hard timeout.
  */
 import { lookup } from 'node:dns/promises';
-import { Agent } from 'undici';
+// undici's own `fetch`, not the global. `dispatcher` — which is what pins the
+// connection to the SSRF-validated IP — is a documented, typed option on
+// undici's fetch, but only an undocumented extension of the global one. The
+// DNS-rebinding defence must not rest on an unspecified extension that a
+// future Node could drop silently.
+import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
 import ipaddr from 'ipaddr.js';
 import { isValidRedirectUri } from './redirectUri';
 import { load as loadConfig } from '../config';
@@ -29,14 +34,51 @@ export interface CimdClient {
 
 const MAX_BODY_BYTES = 1_000_000; // 1 MB
 const FETCH_TIMEOUT_MS = 5_000;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+/** Used when the document supplies no usable `Cache-Control: max-age`. */
+const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+/** Upper bound on a document-supplied `max-age`. */
+const MAX_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+/** Failed resolutions are remembered only briefly — see `cacheNegative`. */
+const NEGATIVE_CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 interface CacheEntry {
-  client: CimdClient;
+  /** `null` records a resolution FAILURE (see `cacheNegative`). */
+  client: CimdClient | null;
   expiresAt: number;
 }
 
 const cache = new Map<string, CacheEntry>();
+
+/**
+ * Record a failed resolution briefly. Without this, every request carrying an
+ * unresolvable URL-form `client_id` costs a fresh DNS lookup plus up to
+ * FETCH_TIMEOUT_MS of outbound fetch — an amplification the OAuth rate limiter
+ * bounds but does not remove. The TTL is deliberately short so a client whose
+ * metadata host was briefly down recovers quickly.
+ *
+ * Always returns `null`, so failure paths can `return cacheNegative(id)`.
+ */
+function cacheNegative(clientId: string): null {
+  cache.set(clientId, { client: null, expiresAt: Date.now() + NEGATIVE_CACHE_TTL_MS });
+  return null;
+}
+
+/**
+ * Positive-cache lifetime for a resolved document: the response's own
+ * `Cache-Control: max-age` when present (the CIMD spec asks resolvers to
+ * respect HTTP cache headers), else the default. Clamped to
+ * MAX_CACHE_TTL_MS so a hostile `max-age=999999999` cannot pin a document we
+ * would otherwise re-check, and floored at 0 for `max-age=0`/`no-store`.
+ */
+function cacheTtlFromResponse(response: UndiciResponse): number {
+  const header = response.headers.get('cache-control') || '';
+  if (/(^|,)\s*(no-store|no-cache)\s*(,|$)/i.test(header)) return 0;
+  const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/i.exec(header);
+  if (!match || match[1] === undefined) return DEFAULT_CACHE_TTL_MS;
+  const seconds = Number(match[1]);
+  if (!Number.isFinite(seconds) || seconds < 0) return DEFAULT_CACHE_TTL_MS;
+  return Math.min(seconds * 1000, MAX_CACHE_TTL_MS);
+}
 
 /**
  * Evict expired entries on every access (same sweep-on-access convention as
@@ -176,7 +218,7 @@ function isValidCimdDocument(doc: unknown, expectedClientId: string): doc is Cim
  * underlying stream as soon as the running byte count exceeds the cap, so a
  * malicious/oversized host response never gets fully read into memory.
  */
-async function readBodyWithCap(response: Response): Promise<string | null> {
+async function readBodyWithCap(response: UndiciResponse): Promise<string | null> {
   if (!response.body) {
     // Environments without a streamable body (shouldn't happen with
     // undici/Node fetch, but guard defensively) fall back to a buffered read.
@@ -214,6 +256,9 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
 
   sweepExpiredCacheEntries();
   const cached = cache.get(clientId);
+  // A live entry short-circuits both ways: a cached document is returned, and
+  // a cached failure (client === null) returns null WITHOUT re-issuing the DNS
+  // lookup and outbound fetch.
   if (cached && cached.expiresAt > Date.now()) return cached.client;
 
   const validatedAddresses = await resolveAndValidateHost(url.hostname);
@@ -223,50 +268,52 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   const dispatcher = pinnedDispatcher(validatedAddresses);
   try {
-    // `dispatcher` is a Node/undici-specific extension of the Fetch API's
-    // RequestInit that isn't part of the lib.dom.d.ts typing TypeScript
-    // resolves globalThis.fetch's options against, so it's typed explicitly
-    // here even though Node's runtime fetch honors it (verified experimentally
-    // against a live network target: pinning `connect.lookup` to a
-    // deliberately wrong IP made the fetch fail to connect, while pinning it
-    // to the real resolved IP succeeded).
-    const requestInit: RequestInit & { dispatcher: Agent } = {
+    const response = await undiciFetch(url.toString(), {
       redirect: 'manual',
       signal: controller.signal,
       headers: { Accept: 'application/json' },
       // Pin the connection to the exact address(es) validated above — do not
-      // let fetch/undici re-resolve DNS independently (see
-      // resolveAndValidateHost's doc comment for why).
+      // let undici re-resolve DNS independently (see resolveAndValidateHost's
+      // doc comment for why). `dispatcher` is a documented, typed option on
+      // undici's fetch, which is why we import it rather than using global
+      // fetch, where it is only an unspecified extension.
       dispatcher,
-    };
-    const response = await fetch(url.toString(), requestInit);
-    if (!response.ok) return null;
-    if (response.redirected) return null;
-    if ((response.status >= 300 && response.status < 400)) return null;
+    });
+    if (!response.ok) return cacheNegative(clientId);
+    if ((response.status >= 300 && response.status < 400)) return cacheNegative(clientId);
 
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json') && !contentType.includes('json')) {
       // Some hosts omit/mislabel content-type for static JSON files; only hard-reject
       // obviously non-JSON types, and let JSON.parse below be the final arbiter.
-      if (contentType.includes('html') || contentType.includes('text/plain')) return null;
+      if (contentType.includes('html') || contentType.includes('text/plain')) {
+        return cacheNegative(clientId);
+      }
     }
 
     const text = await readBodyWithCap(response);
-    if (text === null) return null;
+    if (text === null) return cacheNegative(clientId);
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      return null;
+      return cacheNegative(clientId);
     }
 
-    if (!isValidCimdDocument(parsed, clientId)) return null;
+    if (!isValidCimdDocument(parsed, clientId)) return cacheNegative(clientId);
 
-    cache.set(clientId, { client: parsed, expiresAt: Date.now() + CACHE_TTL_MS });
+    cache.set(clientId, {
+      client: parsed,
+      // Honour the document's own Cache-Control max-age when it supplies one
+      // (the spec asks resolvers to respect HTTP cache headers), so a client
+      // rotating its redirect_uris isn't stale for a fixed hour. Clamped to
+      // MAX_CACHE_TTL_MS so a hostile max-age can't pin a stale document.
+      expiresAt: Date.now() + cacheTtlFromResponse(response),
+    });
     return parsed;
   } catch {
-    return null;
+    return cacheNegative(clientId);
   } finally {
     clearTimeout(timeout);
     void dispatcher.close().catch(() => {});
