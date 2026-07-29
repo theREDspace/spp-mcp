@@ -208,4 +208,24 @@ describe('reauthRewriteMiddleware', () => {
     expect(res._status()).toBe(200);
     expect(res._headers['WWW-Authenticate']).toBeUndefined();
   });
+
+  it('does not buffer or rewrite an SSE (text/event-stream) response', () => {
+    const req = makeReq();
+    const res = makeRes();
+    const next = makeNext();
+
+    reauthRewriteMiddleware(req, res, next);
+
+    // Real (unpatched) writeHead/write/end must be invoked directly for SSE —
+    // capture them before the middleware would otherwise intercept.
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(': keep-alive\n\n');
+    res.end();
+
+    // Content-Type is preserved and status is never rewritten to 401 — the
+    // guard must have passed straight through instead of buffering.
+    expect(res._status()).toBe(200);
+    expect(res._headers['WWW-Authenticate']).toBeUndefined();
+    expect(res._headers['Content-Type']).toBe('text/event-stream');
+  });
 });

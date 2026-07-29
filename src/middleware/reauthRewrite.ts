@@ -47,22 +47,37 @@ export function reauthRewriteMiddleware(
   const originalWrite = res.write.bind(res);
   const originalEnd = res.end.bind(res);
 
+  let isEventStream = false;
+
   // Intercept writeHead — defer it so we can rewrite status/headers if needed
   (res as any).writeHead = (statusCode: number, headersOrReason?: any, headers?: any): Response => {
     capturedStatusCode = statusCode;
     capturedHeaders = (typeof headersOrReason === 'object' && headersOrReason !== null)
       ? headersOrReason
       : headers;
+    const contentType = capturedHeaders?.['Content-Type'] ?? capturedHeaders?.['content-type'];
+    if (typeof contentType === 'string' && contentType.startsWith('text/event-stream')) {
+      isEventStream = true;
+      originalWriteHead(statusCode, capturedHeaders);
+    }
     return res;
   };
 
   (res as any).write = (chunk: any): boolean => {
+    if (isEventStream) return originalWrite(chunk);
     const buf = toBuffer(chunk);
     if (buf.length > 0) chunks.push(buf);
     return true;
   };
 
   (res as any).end = (chunk?: any, encoding?: any, callback?: any): Response => {
+    if (isEventStream) {
+      res.writeHead = originalWriteHead;
+      res.write = originalWrite;
+      res.end = originalEnd;
+      return originalEnd(chunk, encoding, callback);
+    }
+
     const buf = toBuffer(chunk);
     if (buf.length > 0) chunks.push(buf);
 
