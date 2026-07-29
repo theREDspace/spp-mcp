@@ -23,11 +23,23 @@ async function withTestServer(fn: (baseUrl: string) => Promise<void>): Promise<v
 
 describe('legacy /mcp transport (characterization — captures current behavior)', () => {
   beforeAll(() => {
-    // SPPClient's constructor throws if SPP_URL is unset (src/clients/SPPClient.ts:35-38).
-    // buildServer() constructs one per request regardless of whether the tool
-    // being called ever uses it, so every request through this transport needs
-    // it set even for requests (like initialize) that never touch SPP.
-    process.env.SPP_URL = 'https://spp.example.com';
+    // The router now reads config.load() (added in Task 4, to check
+    // MCP_LEGACY) on every POST/DELETE, and load() validates the entire env
+    // schema, not just SPP_URL — so every field src/config.ts requires must
+    // be set here, matching the same "minimal valid config" set used by
+    // src/__tests__/config.test.ts's setMinimal() helper. In a real
+    // deployment this is a non-issue (index.ts calls load() once at startup
+    // before accepting any traffic), but this test exercises
+    // initializeMcpTransport() in isolation, so it must supply a complete
+    // env itself.
+    Object.assign(process.env, {
+      SPP_URL: 'https://spp.example.com',
+      SPP_CLIENT_ID: 'test-client-id',
+      SPP_CLIENT_SECRET: 'test-client-secret',
+      SPP_CALLBACK_URL: 'https://spp.example.com/callback',
+      SPP_NAMESPACE: 'test-namespace',
+      SPP_KEY: 'test-key',
+    });
   });
 
   it('responds to a legacy initialize request with a valid InitializeResult', async () => {
