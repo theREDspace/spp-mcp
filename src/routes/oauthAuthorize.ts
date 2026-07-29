@@ -65,26 +65,42 @@ export async function oauthAuthorizeHandler(req: Request, res: Response): Promis
 
   const cc = params.get('code_challenge') || undefined;
   const ccm = params.get('code_challenge_method') || undefined;
-  // An unsupported method (e.g. 'plain') must be rejected here, not silently
-  // dropped — dropping it lets the flow proceed through a full SPP login and
-  // only fail later at /oauth/token with a misleading "PKCE verification
-  // failed", indistinguishable from a genuine mismatch (RFC 7636 §4.4 wants
-  // invalid_request at the authorization endpoint instead).
+
+  // PKCE is required for every client (OAuth 2.1 / MCP authorization spec),
+  // and /oauth/token now enforces it unconditionally. Reject here rather than
+  // letting the user complete a full SPP login and only discover the problem
+  // at the token exchange — failing late is what made the previous 'plain'
+  // handling produce a misleading "PKCE verification failed" downstream.
+  if (cc === undefined) {
+    res.status(400).send('Missing code_challenge. PKCE (S256) is required.');
+    return;
+  }
+  // An unsupported method (e.g. 'plain') is rejected outright, not silently
+  // dropped (RFC 7636 §4.4 wants invalid_request at the authorization
+  // endpoint). Omitted is fine — S256 is the default and the only value
+  // advertised in code_challenge_methods_supported.
   if (ccm !== undefined && ccm !== 'S256') {
     res.status(400).send('Unsupported code_challenge_method. Only S256 is supported.');
     return;
   }
 
-  if (state && clientRedirectUri) {
-    const entry: import('./oauthState').PendingAuthEntry = {
-      clientRedirectUri,
-      createdAt: Date.now(),
-      ...(cc !== undefined ? { codeChallenge: cc } : {}),
-      ...(ccm === 'S256' ? { codeChallengeMethod: ccm } : {}),
-      clientId: proxyClientId,
-    };
-    pendingAuthRequests.set(state, entry);
+  // `state` is what carries the PKCE challenge and client binding through to
+  // the callback. Without it we cannot bind the eventual code to this client
+  // at all, and /oauth/token rejects unbound codes — so require it here
+  // instead of silently issuing a code that can never be redeemed.
+  if (!state) {
+    res.status(400).send('Missing state.');
+    return;
   }
+
+  const entry: import('./oauthState').PendingAuthEntry = {
+    clientRedirectUri,
+    createdAt: Date.now(),
+    codeChallenge: cc,
+    ...(ccm === 'S256' ? { codeChallengeMethod: ccm } : {}),
+    clientId: proxyClientId,
+  };
+  pendingAuthRequests.set(state, entry);
 
   console.log('[OAUTH-PROXY] authorize request', {
     statePresent: Boolean(state),

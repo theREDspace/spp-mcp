@@ -58,6 +58,7 @@ describe('oauthAuthorizeHandler with CIMD client_id', () => {
       redirect_uri: 'http://127.0.0.1:3000/callback',
       state: 'abc',
       response_type: 'code',
+      code_challenge: 'a-real-s256-challenge', // PKCE is now required for all clients
     });
     const res = makeRes();
 
@@ -175,6 +176,7 @@ describe('oauthAuthorizeHandler with CIMD client_id', () => {
       redirect_uri: 'https://legit-client.example/cb',
       state: 'dcr-match-state',
       response_type: 'code',
+      code_challenge: 'a-real-s256-challenge', // PKCE is now required for all clients
     });
     const res = makeRes();
 
@@ -214,6 +216,53 @@ describe('oauthAuthorizeHandler with CIMD client_id', () => {
     expect(res._status).toBe(400);
     expect(res._redirect).toBeUndefined();
     expect(pendingAuthRequests.get('plain-method-state')).toBeUndefined();
+  });
+
+  it('rejects a request with no code_challenge (PKCE required for all clients)', async () => {
+    // /oauth/token now enforces PKCE unconditionally, so reject here rather
+    // than letting the user complete a full SPP login only to fail at the
+    // token exchange.
+    const { resolveCimdClient } = require('../routes/cimd');
+    (resolveCimdClient as jest.Mock).mockResolvedValue({
+      client_id: 'https://app.example.com/client.json',
+      client_name: 'Example',
+      redirect_uris: ['http://127.0.0.1:3000/callback'],
+    });
+    const { oauthAuthorizeHandler } = require('../routes/oauthAuthorize');
+
+    const req = makeReq({
+      client_id: 'https://app.example.com/client.json',
+      redirect_uri: 'http://127.0.0.1:3000/callback',
+      state: 'no-pkce-state',
+      response_type: 'code',
+    });
+    const res = makeRes();
+
+    await oauthAuthorizeHandler(req, res);
+    expect(res._status).toBe(400);
+    expect(res._redirect).toBeUndefined();
+  });
+
+  it('rejects a request with no state (code could never be bound to this client)', async () => {
+    const { resolveCimdClient } = require('../routes/cimd');
+    (resolveCimdClient as jest.Mock).mockResolvedValue({
+      client_id: 'https://app.example.com/client.json',
+      client_name: 'Example',
+      redirect_uris: ['http://127.0.0.1:3000/callback'],
+    });
+    const { oauthAuthorizeHandler } = require('../routes/oauthAuthorize');
+
+    const req = makeReq({
+      client_id: 'https://app.example.com/client.json',
+      redirect_uri: 'http://127.0.0.1:3000/callback',
+      response_type: 'code',
+      code_challenge: 'a-real-s256-challenge',
+    });
+    const res = makeRes();
+
+    await oauthAuthorizeHandler(req, res);
+    expect(res._status).toBe(400);
+    expect(res._redirect).toBeUndefined();
   });
 
   it('accepts an omitted code_challenge_method (implicit S256 default)', async () => {

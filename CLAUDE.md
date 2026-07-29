@@ -31,7 +31,7 @@ npx jest path/to/file.test.ts  # Single test file
    - `SPP_CALLBACK_URL` — OAuth callback (e.g., `https://your-ngrok-domain/callback/spp`)
    - `APP_BASE_URL` — Public server URL for MCP clients
    - `SPP_NAMESPACE`, `SPP_KEY` — Required for SPP API calls
-   - `REGISTRATION_SECRET` — Optional, recommended for public `/oauth/register`
+   - `REGISTRATION_SECRET` — Optional, but **strongly recommended for any reachable deployment**. Leaving it unset makes `/oauth/register` an open endpoint, so anyone can mint valid proxy client credentials. Obtaining such credentials is step one of several authorization-code interception chains, so treat "unset" as development-only.
    - `MCP_LEGACY` — `serve` (default) or `reject`. Controls whether `/mcp` still serves clients using the pre-2026-07-28 `initialize` handshake alongside modern clients. Flip to `reject` only once logs show no legacy-era traffic (the server logs every legacy-served request).
    - `ALLOWED_ORIGIN_HOSTS` — comma-separated hostnames (no scheme/port) for `Origin` header validation on `/mcp`, per MCP's DNS-rebinding-protection requirement. Leave unset to skip this check (development default).
    - `CIMD_ALLOWED_HOSTS` — optional comma-separated hostname allowlist restricting which hosts `/oauth/authorize` and `/oauth/token` will fetch Client ID Metadata Documents from. Leave unset to allow any `https` host, subject to the built-in SSRF blocking (private/loopback/link-local ranges are always rejected regardless of this setting).
@@ -78,6 +78,15 @@ Point to `https://your-ngrok-domain/mcp` with OAuth auth.
 ### Protocol Revision
 
 `/mcp` serves MCP protocol revision `2026-07-28` (modern, stateless, per-request `_meta` envelope) and the legacy `initialize`-handshake era side by side on the same endpoint, routed in `src/mcp/transport.ts` by the SDK's `isLegacyRequest()` classifier. Both legs share one server-construction factory (`buildServer()` in that file) so tools, resources, capabilities, and cache hints can never drift between eras. See `MCP_LEGACY` above for how legacy support is eventually retired.
+
+### OAuth Proxy Requirements
+
+The proxy enforces these on every authorization-code flow. All are mandated by OAuth 2.1 / the MCP authorization spec, so a conforming MCP client already satisfies them — but a hand-rolled client that skipped any of them will now get a `400` where it previously succeeded:
+
+- **PKCE is required for every client**, not just secret-less CIMD ones. `code_challenge` is mandatory at `/oauth/authorize` and verified at `/oauth/token`. Only `S256` is accepted (`plain` is rejected outright — its challenge travels in a GET query string, so a leaked challenge is a leaked verifier).
+- **`client_id` and `state` are required** at `/oauth/authorize`. Both are load-bearing: `state` carries the PKCE challenge and the client binding through to the callback, and without `client_id` the code cannot be bound to a client at all.
+- **`redirect_uri` must be pre-registered** and is matched for both CIMD and DCR clients. It must be an absolute `https` URL, or `http` on loopback only (`localhost`, `127.0.0.1`, `[::1]`) per RFC 8252 — validated by the single shared `src/routes/redirectUri.ts` used by both registration paths.
+- **A code with no server-side binding is never redeemable.** `codeBindings` entries expire after 10 minutes; a code whose binding is missing or expired is rejected rather than being treated as unconstrained. Consequently `/callback/spp` refuses to relay a `code` when its `state` entry is gone (e.g. lost across a restart) — the client must restart the flow. `SPP_FORWARD_CALLBACK_URL` still relays SPP *error* responses, which carry no credential.
 
 **Services** — `src/services/`
 - Business logic for projects, bookings, users, timesheets, time entries

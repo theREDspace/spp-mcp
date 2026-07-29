@@ -17,6 +17,7 @@
 import { lookup } from 'node:dns/promises';
 import { Agent } from 'undici';
 import ipaddr from 'ipaddr.js';
+import { isValidRedirectUri } from './redirectUri';
 import { load as loadConfig } from '../config';
 
 export interface CimdClient {
@@ -158,31 +159,14 @@ function pinnedDispatcher(addresses: ResolvedAddress[]): Agent {
   });
 }
 
-/**
- * A `redirect_uri` accepted here is later compared against the client's
- * request `redirect_uri` param and, on a match, ends up in an HTTP redirect
- * (see `callbackSpp.ts`). The CIMD document is entirely attacker-authored
- * (fetched from a URL the caller chooses), so an entry that isn't a genuine
- * absolute http(s) URL — e.g. `javascript:...`, `data:...`, or a bare string
- * with no scheme — must not be accepted as a valid redirect target.
- */
-function isValidRedirectUri(u: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(u);
-  } catch {
-    return false;
-  }
-  return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-}
-
 function isValidCimdDocument(doc: unknown, expectedClientId: string): doc is CimdClient {
   if (typeof doc !== 'object' || doc === null) return false;
   const d = doc as Record<string, unknown>;
   if (d.client_id !== expectedClientId) return false;
   if (typeof d.client_name !== 'string' || d.client_name.length === 0) return false;
   if (!Array.isArray(d.redirect_uris) || d.redirect_uris.length === 0) return false;
-  if (!d.redirect_uris.every((u) => typeof u === 'string' && isValidRedirectUri(u))) return false;
+  // Shared with DCR registration — see routes/redirectUri.ts for why.
+  if (!d.redirect_uris.every((u) => isValidRedirectUri(u))) return false;
   return true;
 }
 
