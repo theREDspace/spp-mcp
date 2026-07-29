@@ -14,22 +14,37 @@ import type { Tool } from './types';
 
 const isProd = process.env.NODE_ENV === 'production';
 
-export const mcpTools: Tool[] = [
+const readOnly = { readOnlyHint: true, openWorldHint: true } as const;
+
+const unannotated: Tool[] = [
   // Generic BO CRUD Discovery
-  listObjectTypes,
-  describeObjectType,
+  { ...listObjectTypes, annotations: { ...readOnly } },
+  { ...describeObjectType, annotations: { ...readOnly } },
   // Generic BO CRUD
-  genericRead,
-  genericList,
-  genericBatchList,
-  genericAdd,
-  genericUpdate,
-  genericDelete,
+  { ...genericRead, annotations: { ...readOnly } },
+  { ...genericList, annotations: { ...readOnly } },
+  { ...genericBatchList, annotations: { ...readOnly } },
+  { ...genericAdd, annotations: { idempotentHint: false, openWorldHint: true } },
+  {
+    ...genericUpdate,
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    ...genericDelete,
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  },
   // Composite operations
-  moveHierarchyRecords,
+  {
+    ...moveHierarchyRecords,
+    annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
   // Utility
-  whoami,
-  getUserProfile,
+  { ...whoami, annotations: { ...readOnly } },
+  { ...getUserProfile, annotations: { ...readOnly } },
   // Debug-only — excluded in production
-  ...(isProd ? [] : [echo]),
+  ...(isProd ? [] : [{ ...echo, annotations: { openWorldHint: true } }]),
 ];
+
+export const mcpTools: Tool[] = [...unannotated].sort((a, b) =>
+  a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+);
