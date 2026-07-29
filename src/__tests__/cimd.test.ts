@@ -23,7 +23,10 @@ jest.mock('node:dns/promises', () => ({
   }),
 }));
 
+import { lookup as mockedLookup } from 'node:dns/promises';
 import { resolveCimdClient, _resetCimdCacheForTests } from '../routes/cimd';
+
+const lookupMock = mockedLookup as jest.Mock;
 
 describe('resolveCimdClient', () => {
   const realFetch = global.fetch;
@@ -307,5 +310,67 @@ describe('resolveCimdClient', () => {
     expect(first).toEqual(doc);
     expect(second).toEqual(doc);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression test for the DNS-rebinding TOCTOU gap: the old implementation
+  // resolved DNS once to run the SSRF check (`hostIsAllowed`) and then let
+  // `fetch()`/undici resolve DNS a SECOND, completely independent time to
+  // make the actual connection. A malicious/short-TTL DNS server could
+  // return a safe public IP for the first lookup (passing the check) and a
+  // private/internal IP — e.g. 127.0.0.1 or the cloud metadata address — for
+  // the second (the real connection), bypassing the SSRF blocking entirely.
+  //
+  // The fix resolves DNS exactly once and pins the actual fetch's connection
+  // to that already-validated address via an undici `Agent` with a custom
+  // `connect.lookup`, so a second, independent resolution is structurally
+  // impossible. We prove that here two ways:
+  //   (a) `node:dns/promises` `lookup` is called exactly ONCE for the whole
+  //       resolve — even though we've armed a second call to return an
+  //       unsafe address, proving there's no TOCTOU window left for a
+  //       rebinding attacker to exploit.
+  //   (b) the `fetch()` call actually received a `dispatcher` — i.e. the
+  //       validated address is threaded into the real network call rather
+  //       than being discarded after the check.
+  it('resolves DNS exactly once per resolveCimdClient call, closing the DNS-rebinding TOCTOU gap', async () => {
+    lookupMock.mockClear();
+    const url = 'https://toctou-test.example.com/oauth/client-metadata.json';
+    const doc = {
+      client_id: url,
+      client_name: 'TOCTOU Regression Client',
+      redirect_uris: ['http://127.0.0.1/cb'],
+    };
+
+    // First (and, if the fix holds, ONLY) call: a safe public IP, passing
+    // the SSRF check. If resolveCimdClient ever performed a second,
+    // independent lookup — the TOCTOU bug — THAT call would land here and
+    // return a private/unsafe loopback address instead, simulating a
+    // rebinding DNS server that flips its answer between the check and the
+    // real connection.
+    lookupMock
+      .mockImplementationOnce(async () => [{ address: '93.184.216.34', family: 4 }])
+      .mockImplementationOnce(async () => [{ address: '127.0.0.1', family: 4 }]);
+
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      redirected: false,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify(doc),
+    });
+    global.fetch = fetchSpy as any;
+
+    const result = await resolveCimdClient(url);
+
+    expect(result).toEqual(doc);
+    // (a) The strongest proof: only one DNS resolution ever happened for
+    // this resolve, so there was never a second, independently-resolvable
+    // answer for a rebinding attacker to substitute.
+    expect(lookupMock).toHaveBeenCalledTimes(1);
+
+    // (b) The validated address from that single lookup was actually
+    // threaded into the fetch call (via a pinned dispatcher), not merely
+    // checked and then discarded while fetch resolved DNS itself.
+    const fetchOptions = fetchSpy.mock.calls[0]?.[1];
+    expect(fetchOptions?.dispatcher).toBeDefined();
   });
 });

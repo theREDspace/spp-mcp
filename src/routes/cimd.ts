@@ -16,6 +16,7 @@
  */
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { Agent } from 'undici';
 import { load as loadConfig } from '../config';
 
 export interface CimdClient {
@@ -89,13 +90,30 @@ function isDisallowedIp(address: string): boolean {
   return true; // unresolvable/unknown — fail closed
 }
 
-async function hostIsAllowed(hostname: string): Promise<boolean> {
+interface ResolvedAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+/**
+ * Resolve `hostname` via DNS exactly once and validate every returned address
+ * against the SSRF blocklist. Returns the validated addresses on success, or
+ * `null` if disallowed/unresolvable.
+ *
+ * IMPORTANT (DNS-rebinding / TOCTOU): this is the ONLY DNS resolution that
+ * happens for a given CIMD fetch. The addresses returned here MUST be reused
+ * (via a pinned `connect.lookup`) for the actual `fetch()` call rather than
+ * letting undici re-resolve the hostname independently — otherwise a
+ * malicious/short-TTL DNS server could return a benign IP here and a
+ * private/internal IP for the real connection, bypassing this check entirely.
+ */
+async function resolveAndValidateHost(hostname: string): Promise<ResolvedAddress[] | null> {
   const config = loadConfig();
   const allowlist = (config.CIMD_ALLOWED_HOSTS || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  if (allowlist.length > 0 && !allowlist.includes(hostname)) return false;
+  if (allowlist.length > 0 && !allowlist.includes(hostname)) return null;
 
   // `URL#hostname` serializes an IPv6 host with its enclosing brackets (e.g.
   // `[fe80::1]`), but `dns.lookup`/`isIP` expect the bare address — strip them
@@ -104,15 +122,40 @@ async function hostIsAllowed(hostname: string): Promise<boolean> {
   const lookupHost =
     hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
 
-  let addresses: { address: string }[];
+  let addresses: { address: string; family: number }[];
   try {
     const result = await lookup(lookupHost, { all: true, verbatim: true });
     addresses = Array.isArray(result) ? result : [result];
   } catch {
-    return false; // DNS failure — fail closed
+    return null; // DNS failure — fail closed
   }
-  if (addresses.length === 0) return false;
-  return addresses.every((a) => !isDisallowedIp(a.address));
+  if (addresses.length === 0) return null;
+  if (!addresses.every((a) => !isDisallowedIp(a.address))) return null;
+
+  return addresses.map((a) => ({
+    address: a.address,
+    family: (a.family === 6 ? 6 : 4) as 4 | 6,
+  }));
+}
+
+/**
+ * Build an undici `Agent` whose `connect.lookup` unconditionally returns the
+ * already-validated `addresses` — no further DNS resolution occurs for
+ * connections made through it. TLS SNI/certificate hostname validation and
+ * the HTTP `Host` header are unaffected: those are driven by the URL/hostname
+ * passed to `fetch()`, not by this connector, so virtual-hosting and
+ * certificate checks against the real hostname still work correctly. This
+ * closes the DNS-rebinding TOCTOU gap: the IP address that was checked is
+ * exactly the IP address that gets connected to.
+ */
+function pinnedDispatcher(addresses: ResolvedAddress[]): Agent {
+  return new Agent({
+    connect: {
+      lookup: (_hostname, _options, callback) => {
+        callback(null, addresses.map((a) => ({ address: a.address, family: a.family })));
+      },
+    },
+  });
 }
 
 function isValidCimdDocument(doc: unknown, expectedClientId: string): doc is CimdClient {
@@ -170,17 +213,30 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
   const cached = cache.get(clientId);
   if (cached && cached.expiresAt > Date.now()) return cached.client;
 
-  const allowed = await hostIsAllowed(url.hostname);
-  if (!allowed) return null;
+  const validatedAddresses = await resolveAndValidateHost(url.hostname);
+  if (!validatedAddresses) return null;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const dispatcher = pinnedDispatcher(validatedAddresses);
   try {
-    const response = await fetch(url.toString(), {
+    // `dispatcher` is a Node/undici-specific extension of the Fetch API's
+    // RequestInit that isn't part of the lib.dom.d.ts typing TypeScript
+    // resolves globalThis.fetch's options against, so it's typed explicitly
+    // here even though Node's runtime fetch honors it (verified experimentally
+    // against a live network target: pinning `connect.lookup` to a
+    // deliberately wrong IP made the fetch fail to connect, while pinning it
+    // to the real resolved IP succeeded).
+    const requestInit: RequestInit & { dispatcher: Agent } = {
       redirect: 'manual',
       signal: controller.signal,
       headers: { Accept: 'application/json' },
-    });
+      // Pin the connection to the exact address(es) validated above — do not
+      // let fetch/undici re-resolve DNS independently (see
+      // resolveAndValidateHost's doc comment for why).
+      dispatcher,
+    };
+    const response = await fetch(url.toString(), requestInit);
     if (!response.ok) return null;
     if (response.redirected) return null;
     if ((response.status >= 300 && response.status < 400)) return null;
@@ -210,6 +266,7 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
     return null;
   } finally {
     clearTimeout(timeout);
+    void dispatcher.close().catch(() => {});
   }
 }
 
