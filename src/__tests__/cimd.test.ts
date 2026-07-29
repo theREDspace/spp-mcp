@@ -93,6 +93,58 @@ describe('resolveCimdClient', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // Regression coverage for the fe80::/10 CIDR-boundary bug: the old check
+  // was `lower.startsWith('fe80:')`, a literal string-prefix match that only
+  // catches addresses starting with the exact group `fe80`. The real
+  // link-local range fe80::/10 covers first-hextet values 0xfe80-0xfebf
+  // inclusive, so `fe90::1` and `febf::ffff` are genuinely link-local but
+  // were NOT caught by the old prefix check (and would fall through to
+  // "allowed"). These two hosts sit outside the old buggy match but inside
+  // the correct range, so they only pass with the range-based fix.
+  it.each(['fe90::1', 'febf::ffff'])(
+    'rejects a link-local IPv6 host (%s) that the old fe80:-prefix check would have missed',
+    async (addr) => {
+      const fetchSpy = jest.fn();
+      global.fetch = fetchSpy as any;
+      const result = await resolveCimdClient(`https://[${addr}]/client.json`);
+      expect(result).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a link-local IPv6 host at the exact lower bound (fe80::1) before ever calling fetch', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as any;
+    const result = await resolveCimdClient('https://[fe80::1]/client.json');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // Boundary sanity check: addresses just outside the fe80::/10 range on
+  // either side must NOT be blocked by the link-local check itself. fe7f::1
+  // is one hextet below the range; fec0::1 is one hextet above it (and isn't
+  // caught by the separate fc/fd unique-local check either, since it starts
+  // with `fec0`, not `fc`/`fd`). Both should proceed to fetch.
+  it.each(['fe7f::1', 'fec0::1'])(
+    'does not block %s via the link-local check (falls through to fetch)',
+    async (addr) => {
+      const url = `https://[${addr}]/client.json`;
+      const doc = { client_id: url, client_name: 'Edge Client', redirect_uris: ['http://127.0.0.1/cb'] };
+      const fetchSpy = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        redirected: false,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(doc),
+      });
+      global.fetch = fetchSpy as any;
+
+      const result = await resolveCimdClient(url);
+      expect(result).toEqual(doc);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('fetches, validates, and returns a well-formed metadata document', async () => {
     const url = 'https://app.example.com/oauth/client-metadata.json';
     const doc = {
@@ -187,6 +239,55 @@ describe('resolveCimdClient', () => {
 
     const result = await resolveCimdClient(url);
     expect(result).toBeNull();
+  });
+
+  it('aborts a streamed response as soon as the running size exceeds the cap, without reading to completion', async () => {
+    const url = 'https://app.example.com/oauth/client-metadata.json';
+    // Each chunk is 400_000 bytes; three chunks (1.2MB) exceed MAX_BODY_BYTES
+    // (1MB) on the second chunk already (800_000 > ... no — cumulative:
+    // chunk1=400_000, chunk2=800_000, chunk3=1_200_000 > 1_000_000). The cap
+    // should trip while reading chunk 3, so chunk 4 (a sentinel) must never
+    // be consumed if the implementation truly streams-and-aborts rather than
+    // buffering everything first.
+    const chunkSize = 400_000;
+    const chunks = [
+      new Uint8Array(chunkSize),
+      new Uint8Array(chunkSize),
+      new Uint8Array(chunkSize),
+      new Uint8Array(chunkSize), // sentinel — must not be read
+    ];
+    let readCount = 0;
+    const cancelSpy = jest.fn().mockResolvedValue(undefined);
+    const reader = {
+      read: jest.fn(async () => {
+        if (readCount >= chunks.length) return { done: true, value: undefined };
+        const value = chunks[readCount];
+        readCount += 1;
+        return { done: false, value };
+      }),
+      cancel: cancelSpy,
+      releaseLock: jest.fn(),
+    };
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      redirected: false,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      body: { getReader: () => reader },
+      // If the implementation regresses to buffering via response.text(),
+      // this would throw/be unused — text() is intentionally not provided
+      // so a regression to the old buffered path fails loudly instead of
+      // silently passing.
+    }) as any;
+
+    const result = await resolveCimdClient(url);
+
+    expect(result).toBeNull();
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    // Only 3 of the 4 chunks should have been read before the cap tripped —
+    // proof the sentinel 4th chunk was never consumed (i.e. no full buffering).
+    expect(reader.read).toHaveBeenCalledTimes(3);
   });
 
   it('caches a resolved document and does not re-fetch on the second call', async () => {

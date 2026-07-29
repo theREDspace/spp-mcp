@@ -66,7 +66,18 @@ function isDisallowedIp(address: string): boolean {
   if (version === 6) {
     const lower = address.toLowerCase();
     if (lower === '::1') return true; // loopback
-    if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true; // link-local
+    // Link-local range is fe80::/10: first 10 bits fixed means the first
+    // hextet must fall in 0xfe80-0xfebf inclusive. String-prefix matching
+    // (e.g. `startsWith('fe80:')`) misses in-range values like `fe90::1` or
+    // `febf::ffff`, so parse the first hextet as a number and range-check it.
+    // The first hextet is never elided by `::` abbreviation unless the
+    // address itself starts with `::` (e.g. `::1`, `::2`), in which case the
+    // first hextet is implicitly 0 — well outside the link-local range.
+    const firstHextetRaw = lower.split(':')[0] ?? '';
+    const firstHextet = firstHextetRaw === '' ? '0' : firstHextetRaw;
+    const firstHextetValue = parseInt(firstHextet, 16);
+    if (Number.isNaN(firstHextetValue)) return true; // unparseable — fail closed
+    if (firstHextetValue >= 0xfe80 && firstHextetValue <= 0xfebf) return true; // link-local fe80::/10
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (RFC4193)
     if (lower.startsWith('::ffff:')) {
       // IPv4-mapped IPv6 — re-check the embedded v4 address.
@@ -86,9 +97,16 @@ async function hostIsAllowed(hostname: string): Promise<boolean> {
     .filter(Boolean);
   if (allowlist.length > 0 && !allowlist.includes(hostname)) return false;
 
+  // `URL#hostname` serializes an IPv6 host with its enclosing brackets (e.g.
+  // `[fe80::1]`), but `dns.lookup`/`isIP` expect the bare address — strip them
+  // so IPv6-literal hosts are actually resolved/checked rather than treated
+  // as an unresolvable hostname.
+  const lookupHost =
+    hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+
   let addresses: { address: string }[];
   try {
-    const result = await lookup(hostname, { all: true, verbatim: true });
+    const result = await lookup(lookupHost, { all: true, verbatim: true });
     addresses = Array.isArray(result) ? result : [result];
   } catch {
     return false; // DNS failure — fail closed
@@ -105,6 +123,44 @@ function isValidCimdDocument(doc: unknown, expectedClientId: string): doc is Cim
   if (!Array.isArray(d.redirect_uris) || d.redirect_uris.length === 0) return false;
   if (!d.redirect_uris.every((u) => typeof u === 'string')) return false;
   return true;
+}
+
+/**
+ * Read a fetch Response body as UTF-8 text, enforcing MAX_BODY_BYTES while
+ * streaming rather than after fully buffering. Aborts and cancels the
+ * underlying stream as soon as the running byte count exceeds the cap, so a
+ * malicious/oversized host response never gets fully read into memory.
+ */
+async function readBodyWithCap(response: Response): Promise<string | null> {
+  if (!response.body) {
+    // Environments without a streamable body (shouldn't happen with
+    // undici/Node fetch, but guard defensively) fall back to a buffered read.
+    const text = await response.text();
+    if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) return null;
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        total += value.byteLength;
+        if (total > MAX_BODY_BYTES) {
+          await reader.cancel().catch(() => {});
+          return null;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
 }
 
 export async function resolveCimdClient(clientId: string): Promise<CimdClient | null> {
@@ -136,8 +192,8 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
       if (contentType.includes('html') || contentType.includes('text/plain')) return null;
     }
 
-    const text = await response.text();
-    if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) return null;
+    const text = await readBodyWithCap(response);
+    if (text === null) return null;
 
     let parsed: unknown;
     try {
