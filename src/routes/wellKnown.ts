@@ -27,8 +27,10 @@ export function oauthProtectedResourceHandler(_req: Request, res: Response) {
  * Proxies SPP's OAuth endpoints so MCP clients can auto-discover them even if
  * SPP does not expose its own /.well-known document.
  *
- * NOTE: registration_endpoint is intentionally omitted — we do not support
- * Dynamic Client Registration. Clients must be pre-registered with SPP.
+ * registration_endpoint (DCR) is supported for backwards compatibility, but
+ * Client ID Metadata Documents (client_id_metadata_document_supported) are
+ * the spec's preferred mechanism and should be tried first by conforming
+ * clients — see /oauth/authorize's resolveCimdClient() call.
  */
 export function oauthAuthorizationServerHandler(_req: Request, res: Response) {
   const sppUrl = (process.env.SPP_URL || '').replace(/\/$/, '');
@@ -47,7 +49,8 @@ export function oauthAuthorizationServerHandler(_req: Request, res: Response) {
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     scopes_supported: ['xml', 'rest'],
-    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
+    client_id_metadata_document_supported: true,
     // PKCE is terminated at this proxy (see oauthAuthorize/oauthToken); required
     // advertisement per MCP spec 2025-11-25.
     code_challenge_methods_supported: ['S256'],

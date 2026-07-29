@@ -57,5 +57,7 @@ export function callbackSppGetHandler(req: Request, res: Response) {
   // by the client before code exchange in some flows.
 
   const params = new URLSearchParams(req.query as Record<string, string>);
+  const issuer = (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, '');
+  params.set('iss', issuer);
   res.redirect(`${entry.clientRedirectUri}?${params.toString()}`);
 }

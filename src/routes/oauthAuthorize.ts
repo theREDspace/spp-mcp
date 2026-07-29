@@ -1,18 +1,21 @@
 import { Request, Response } from 'express';
 import { pendingAuthRequests } from './oauthState';
 import { getClient } from './clientRegistry';
+import { resolveCimdClient } from './cimd';
 import { load as loadConfig } from '../config';
 
 /**
  * GET /oauth/authorize
  *
- * 1. Validate proxy client_id (registered via /oauth/register).
+ * 1. Validate the client_id — either a Client ID Metadata Document URL
+ *    (https, resolved and validated against the request's redirect_uri) or a
+ *    proxy client_id registered via /oauth/register (DCR).
  * 2. Stash the client's redirect_uri + PKCE challenge under `state` so the
  *    callback can relay back and /oauth/token can verify the code_verifier.
  * 3. Rewrite redirect_uri to SPP_CALLBACK_URL, strip PKCE, swap client_id for
  *    SPP_CLIENT_ID, and redirect to SPP's real /authorize.
  */
-export function oauthAuthorizeHandler(req: Request, res: Response) {
+export async function oauthAuthorizeHandler(req: Request, res: Response): Promise<void> {
   const config = loadConfig();
   const sppUrl = config.SPP_URL.replace(/\/$/, '');
   const callbackUrl = config.SPP_CALLBACK_URL;
@@ -23,9 +26,17 @@ export function oauthAuthorizeHandler(req: Request, res: Response) {
   const state = params.get('state');
   const proxyClientId = params.get('client_id') || undefined;
 
-  if (proxyClientId && !getClient(proxyClientId)) {
-    res.status(400).send('Unknown client_id. Register via /oauth/register first.');
-    return;
+  if (proxyClientId) {
+    const cimdClient = await resolveCimdClient(proxyClientId);
+    if (cimdClient) {
+      if (!clientRedirectUri || !cimdClient.redirect_uris.includes(clientRedirectUri)) {
+        res.status(400).send('redirect_uri is not registered in the Client ID Metadata Document.');
+        return;
+      }
+    } else if (!getClient(proxyClientId)) {
+      res.status(400).send('Unknown client_id. Register via /oauth/register first.');
+      return;
+    }
   }
 
   if (state && clientRedirectUri) {

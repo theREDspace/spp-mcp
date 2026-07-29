@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { codeBindings } from './oauthState';
 import { extractClientCredentials, verifyClientSecret, getClient } from './clientRegistry';
+import { resolveCimdClient } from './cimd';
 import { verifyPkce } from './pkce';
 import { load as loadConfig } from '../config';
 
@@ -30,15 +31,22 @@ export async function oauthTokenHandler(req: Request, res: Response) {
     res.status(401).json({ error: 'invalid_client', error_description: 'Missing client credentials.' });
     return;
   }
-  const clientRecord = getClient(creds.client_id);
-  if (!clientRecord) {
-    res.status(401).json({ error: 'invalid_client', error_description: 'Unknown client_id.' });
-    return;
-  }
-  if (clientRecord.token_endpoint_auth_method !== 'none') {
-    if (!creds.client_secret || !verifyClientSecret(creds.client_id, creds.client_secret)) {
-      res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client_secret.' });
+  const cimdClient = await resolveCimdClient(creds.client_id);
+  if (cimdClient) {
+    // CIMD clients are public by construction (self-hosted metadata URL as
+    // client_id); PKCE below is the sole binding, matching the spec's
+    // token_endpoint_auth_method: "none" expectation for such clients.
+  } else {
+    const clientRecord = getClient(creds.client_id);
+    if (!clientRecord) {
+      res.status(401).json({ error: 'invalid_client', error_description: 'Unknown client_id.' });
       return;
+    }
+    if (clientRecord.token_endpoint_auth_method !== 'none') {
+      if (!creds.client_secret || !verifyClientSecret(creds.client_id, creds.client_secret)) {
+        res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client_secret.' });
+        return;
+      }
     }
   }
   // Don't forward proxy client creds upstream.
