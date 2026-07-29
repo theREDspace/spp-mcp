@@ -15,8 +15,8 @@
  * apply a hard timeout.
  */
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { Agent } from 'undici';
+import ipaddr from 'ipaddr.js';
 import { load as loadConfig } from '../config';
 
 export interface CimdClient {
@@ -37,6 +37,20 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
+/**
+ * Evict expired entries on every access (same sweep-on-access convention as
+ * the OAuth proxy's `TtlMap` in `oauthState.ts`). `client_id` is
+ * attacker-supplied, so without this the cache grows unboundedly for the
+ * lifetime of the process — expiry was previously checked only on a cache
+ * hit for the SAME key, never proactively.
+ */
+function sweepExpiredCacheEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (entry.expiresAt <= now) cache.delete(key);
+  }
+}
+
 function isUrlFormClientId(clientId: string): URL | null {
   let url: URL;
   try {
@@ -49,45 +63,31 @@ function isUrlFormClientId(clientId: string): URL | null {
   return url;
 }
 
+/**
+ * Fail-closed allowlist: block everything except genuine public unicast
+ * addresses, using `ipaddr.js`'s range classification rather than a
+ * hand-rolled denylist.
+ *
+ * A hand-rolled per-range string/octet matcher was tried twice in this
+ * module's history and found newly-broken both times (an IPv6 `fe80::/10`
+ * range treated as a literal string prefix, then a follow-up review that
+ * additionally found CGNAT `100.64.0.0/10` — reachable via real
+ * publicly-trusted TLS certs, e.g. Tailscale's `*.ts.net` — the IPv6
+ * unspecified address `::`, and the NAT64 `64:ff9b::/96` prefix all slipping
+ * through unblocked). Denylists only cover the ranges someone thought to
+ * enumerate; an allowlist on a well-maintained library's classification is
+ * structurally safer here — anything not explicitly recognized as public
+ * `unicast` is blocked, including ranges nobody thought to name.
+ * `ipaddr.js`'s `process()` also transparently unwraps IPv4-mapped IPv6
+ * addresses (`::ffff:127.0.0.1`) to their embedded IPv4 form before
+ * classifying, so that case needs no special-casing here either.
+ */
 function isDisallowedIp(address: string): boolean {
-  const version = isIP(address);
-  if (version === 4) {
-    const octets = address.split('.').map(Number);
-    const [a, b] = octets;
-    if (a === undefined || b === undefined) return true;
-    if (a === 127) return true; // loopback
-    if (a === 10) return true; // RFC1918
-    if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
-    if (a === 192 && b === 168) return true; // RFC1918
-    if (a === 169 && b === 254) return true; // link-local incl. cloud metadata (169.254.169.254)
-    if (a === 0) return true; // "this network"
-    if (a >= 224) return true; // multicast/reserved
-    return false;
+  try {
+    return ipaddr.process(address).range() !== 'unicast';
+  } catch {
+    return true; // unparseable — fail closed
   }
-  if (version === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::1') return true; // loopback
-    // Link-local range is fe80::/10: first 10 bits fixed means the first
-    // hextet must fall in 0xfe80-0xfebf inclusive. String-prefix matching
-    // (e.g. `startsWith('fe80:')`) misses in-range values like `fe90::1` or
-    // `febf::ffff`, so parse the first hextet as a number and range-check it.
-    // The first hextet is never elided by `::` abbreviation unless the
-    // address itself starts with `::` (e.g. `::1`, `::2`), in which case the
-    // first hextet is implicitly 0 — well outside the link-local range.
-    const firstHextetRaw = lower.split(':')[0] ?? '';
-    const firstHextet = firstHextetRaw === '' ? '0' : firstHextetRaw;
-    const firstHextetValue = parseInt(firstHextet, 16);
-    if (Number.isNaN(firstHextetValue)) return true; // unparseable — fail closed
-    if (firstHextetValue >= 0xfe80 && firstHextetValue <= 0xfebf) return true; // link-local fe80::/10
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (RFC4193)
-    if (lower.startsWith('::ffff:')) {
-      // IPv4-mapped IPv6 — re-check the embedded v4 address.
-      const v4 = lower.replace('::ffff:', '');
-      return isIP(v4) === 4 ? isDisallowedIp(v4) : true;
-    }
-    return false;
-  }
-  return true; // unresolvable/unknown — fail closed
 }
 
 interface ResolvedAddress {
@@ -158,13 +158,31 @@ function pinnedDispatcher(addresses: ResolvedAddress[]): Agent {
   });
 }
 
+/**
+ * A `redirect_uri` accepted here is later compared against the client's
+ * request `redirect_uri` param and, on a match, ends up in an HTTP redirect
+ * (see `callbackSpp.ts`). The CIMD document is entirely attacker-authored
+ * (fetched from a URL the caller chooses), so an entry that isn't a genuine
+ * absolute http(s) URL — e.g. `javascript:...`, `data:...`, or a bare string
+ * with no scheme — must not be accepted as a valid redirect target.
+ */
+function isValidRedirectUri(u: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(u);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+}
+
 function isValidCimdDocument(doc: unknown, expectedClientId: string): doc is CimdClient {
   if (typeof doc !== 'object' || doc === null) return false;
   const d = doc as Record<string, unknown>;
   if (d.client_id !== expectedClientId) return false;
   if (typeof d.client_name !== 'string' || d.client_name.length === 0) return false;
   if (!Array.isArray(d.redirect_uris) || d.redirect_uris.length === 0) return false;
-  if (!d.redirect_uris.every((u) => typeof u === 'string')) return false;
+  if (!d.redirect_uris.every((u) => typeof u === 'string' && isValidRedirectUri(u))) return false;
   return true;
 }
 
@@ -210,6 +228,7 @@ export async function resolveCimdClient(clientId: string): Promise<CimdClient | 
   const url = isUrlFormClientId(clientId);
   if (!url) return null;
 
+  sweepExpiredCacheEntries();
   const cached = cache.get(clientId);
   if (cached && cached.expiresAt > Date.now()) return cached.client;
 

@@ -96,6 +96,58 @@ describe('resolveCimdClient', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // Regression coverage for gaps found by external review in the old
+  // hand-rolled isDisallowedIp (before it was replaced with ipaddr.js's
+  // range() classification): CGNAT (100.64.0.0/10, RFC 6598) was completely
+  // unhandled by the old v4 octet checks — practically exploitable, since
+  // Tailscale assigns tailnet addresses from this range and issues real,
+  // publicly-trusted Let's Encrypt certs for `*.ts.net`, giving a clean
+  // server-side fetch of an internal-only service with no TLS red flag.
+  it('rejects a CGNAT (100.64.0.0/10) host before ever calling fetch', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as any;
+    const result = await resolveCimdClient('https://100.64.1.1/client.json');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // The IPv6 unspecified address `::` was allowed by the old check (its first
+  // hextet parses as 0, outside the fe80::/10 link-local range, and it
+  // matches none of the other string-prefix checks). A pinned-dispatcher
+  // fetch to `[::]` reaches a loopback-bound listener.
+  it('rejects the IPv6 unspecified address (::) before ever calling fetch', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as any;
+    const result = await resolveCimdClient('https://[::]/client.json');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // The old exact-string check `lower === '::1'` missed the equivalent
+  // uncompressed loopback form. Not reachable via a URL literal (WHATWG
+  // normalizes `[0:0:0:0:0:0:0:1]` to `[::1]`), but reachable if a resolver
+  // ever hands back the long form — ipaddr.js's range() classifies both
+  // forms identically as `loopback`.
+  it('rejects the uncompressed IPv6 loopback form (0:0:0:0:0:0:0:1)', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as any;
+    const result = await resolveCimdClient('https://[0:0:0:0:0:0:0:1]/client.json');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // 64:ff9b::/96 (NAT64, RFC 6052) embeds an IPv4 address in its low 32 bits
+  // — 64:ff9b::7f00:1 embeds 127.0.0.1 (0x7f00 0x0001). The old check had no
+  // NAT64 handling at all, letting an embedded loopback/private address
+  // through unblocked on networks with a NAT64 gateway.
+  it('rejects a NAT64 (64:ff9b::/96) host embedding a loopback address', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as any;
+    const result = await resolveCimdClient('https://[64:ff9b::7f00:1]/client.json');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   // Regression coverage for the fe80::/10 CIDR-boundary bug: the old check
   // was `lower.startsWith('fe80:')`, a literal string-prefix match that only
   // catches addresses starting with the exact group `fe80`. The real
@@ -189,6 +241,49 @@ describe('resolveCimdClient', () => {
   it('rejects a document missing a required field', async () => {
     const url = 'https://app.example.com/oauth/client-metadata.json';
     const doc = { client_id: url, client_name: 'Example' }; // missing redirect_uris
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      redirected: false,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify(doc),
+    }) as any;
+
+    const result = await resolveCimdClient(url);
+    expect(result).toBeNull();
+  });
+
+  // The CIMD document is entirely attacker-authored (fetched from a URL the
+  // caller chooses as client_id). A redirect_uris entry that isn't a genuine
+  // absolute http(s) URL (e.g. javascript:/data:) must not validate — it
+  // would otherwise flow through the redirect_uri membership check in
+  // oauthAuthorize.ts and reach the eventual redirect in callbackSpp.ts.
+  it('rejects a document whose redirect_uris contains a non-http(s) scheme', async () => {
+    const url = 'https://app.example.com/oauth/client-metadata.json';
+    const doc = {
+      client_id: url,
+      client_name: 'Example',
+      redirect_uris: ['javascript:alert(1)'],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      redirected: false,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify(doc),
+    }) as any;
+
+    const result = await resolveCimdClient(url);
+    expect(result).toBeNull();
+  });
+
+  it('rejects a document whose redirect_uris contains a non-URL string', async () => {
+    const url = 'https://app.example.com/oauth/client-metadata.json';
+    const doc = {
+      client_id: url,
+      client_name: 'Example',
+      redirect_uris: ['not a url at all'],
+    };
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,

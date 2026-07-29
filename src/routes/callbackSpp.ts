@@ -37,6 +37,7 @@ export function callbackSppGetHandler(req: Request, res: Response) {
       return;
     }
     const params = new URLSearchParams(req.query as Record<string, string>);
+    params.set('iss', (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, ''));
     console.log(`[OAUTH-RELAY] State not found, using fallback → ${fallback}`);
     res.redirect(`${fallback}?${params.toString()}`);
     return;
