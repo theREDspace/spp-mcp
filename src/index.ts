@@ -11,6 +11,7 @@ process.on('unhandledRejection', (reason) => {
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { originValidation } from '@modelcontextprotocol/express';
 import { load as loadConfig } from './config';
 import healthHandler from './routes/health';
 import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
@@ -47,8 +48,16 @@ app.use(
   cors({
     origin: corsOrigins.length ? corsOrigins : true,
     credentials: false,
-    exposedHeaders: ['Mcp-Session-Id', 'WWW-Authenticate', 'X-Request-Id'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Mcp-Session-Id', 'MCP-Protocol-Version', 'X-Request-Id'],
+    exposedHeaders: ['WWW-Authenticate', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Mcp-Session-Id',
+      'MCP-Protocol-Version',
+      'Mcp-Method',
+      'Mcp-Name',
+      'X-Request-Id',
+    ],
   })
 );
 
@@ -98,6 +107,14 @@ app.get('/health', healthHandler);
 async function startServer() {
   try {
     const mcpRouter = await initializeMcpTransport();
+
+    const allowedOriginHosts = (config.ALLOWED_ORIGIN_HOSTS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (allowedOriginHosts.length > 0) {
+      app.use('/mcp', originValidation(allowedOriginHosts));
+    }
 
     // Bearer auth applied to all /mcp routes (express normalizes trailing slash)
     app.use('/mcp', bearerAuthMiddleware, reauthRewriteMiddleware, mcpRouter);
