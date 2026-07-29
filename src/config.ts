@@ -37,6 +37,15 @@ const schema = z.object({
   // HTTP
   CORS_ORIGINS: z.string().optional(), // comma-separated
   TRUST_PROXY: z.string().optional(),  // 'true', 'loopback', '1', a hop count, etc.
+
+  // MCP protocol era control
+  MCP_LEGACY: z.enum(['serve', 'reject']).default('serve'),
+
+  // Origin header allowlist for DNS-rebinding protection on /mcp (comma-separated hostnames)
+  ALLOWED_ORIGIN_HOSTS: z.string().optional(),
+
+  // Client ID Metadata Document trust policy (comma-separated hostnames; unset = any https host)
+  CIMD_ALLOWED_HOSTS: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof schema>;
