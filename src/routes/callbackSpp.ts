@@ -29,7 +29,28 @@ export function callbackSppGetHandler(req: Request, res: Response) {
 
   const entry = pendingAuthRequests.get(state);
   if (!entry) {
+    // No pending entry means we cannot attribute this callback to a client:
+    // no redirect_uri to validate against, no PKCE challenge, no client id to
+    // bind the code to. /oauth/token rejects codes without a binding, so
+    // relaying a code down this path would hand out something unredeemable at
+    // best — and, before that rejection existed, something redeemable by ANY
+    // registered client at worst. So a code response is refused outright here.
+    //
+    // Error responses (no `code`) are still relayed via
+    // SPP_FORWARD_CALLBACK_URL when configured, since surfacing SPP's own
+    // error to the client is useful and carries no credential.
+    const code = req.query.code as string | undefined;
     const fallback = (process.env.SPP_FORWARD_CALLBACK_URL || '').replace(/\/$/, '');
+    if (code) {
+      console.warn(
+        '[OAUTH-RELAY] Refusing to relay an authorization code with no pending state entry ' +
+          '(expired, or lost across a restart). Client must restart the flow.'
+      );
+      res
+        .status(400)
+        .send('Authorization state not found or expired. Please restart the authorization flow.');
+      return;
+    }
     if (!fallback) {
       res
         .status(400)
@@ -37,7 +58,8 @@ export function callbackSppGetHandler(req: Request, res: Response) {
       return;
     }
     const params = new URLSearchParams(req.query as Record<string, string>);
-    console.log(`[OAUTH-RELAY] State not found, using fallback → ${fallback}`);
+    params.set('iss', (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, ''));
+    console.log(`[OAUTH-RELAY] State not found, relaying error response to fallback → ${fallback}`);
     res.redirect(`${fallback}?${params.toString()}`);
     return;
   }
@@ -57,5 +79,7 @@ export function callbackSppGetHandler(req: Request, res: Response) {
   // by the client before code exchange in some flows.
 
   const params = new URLSearchParams(req.query as Record<string, string>);
+  const issuer = (process.env.APP_BASE_URL || 'http://localhost:3030').replace(/\/$/, '');
+  params.set('iss', issuer);
   res.redirect(`${entry.clientRedirectUri}?${params.toString()}`);
 }

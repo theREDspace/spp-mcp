@@ -9,7 +9,10 @@
 export interface PendingAuthEntry {
   clientRedirectUri: string;
   codeChallenge?: string | undefined;
-  codeChallengeMethod?: 'S256' | 'plain' | undefined;
+  // S256 only — 'plain' is rejected at /oauth/authorize (its challenge travels
+  // in a GET query string, so a leaked challenge is a leaked verifier). Kept
+  // out of the type so it cannot be reintroduced without a deliberate change.
+  codeChallengeMethod?: 'S256' | undefined;
   clientId?: string | undefined;
   createdAt: number;
 }
@@ -51,7 +54,10 @@ export const pendingAuthRequests = new TtlMap<PendingAuthEntry>();
  */
 export interface CodeBinding {
   codeChallenge?: string | undefined;
-  codeChallengeMethod?: 'S256' | 'plain' | undefined;
+  // S256 only — 'plain' is rejected at /oauth/authorize (its challenge travels
+  // in a GET query string, so a leaked challenge is a leaked verifier). Kept
+  // out of the type so it cannot be reintroduced without a deliberate change.
+  codeChallengeMethod?: 'S256' | undefined;
   proxyClientId?: string | undefined;
   clientRedirectUri: string;
   createdAt: number;

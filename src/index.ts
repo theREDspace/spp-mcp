@@ -11,6 +11,7 @@ process.on('unhandledRejection', (reason) => {
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { originValidation } from '@modelcontextprotocol/express';
 import { load as loadConfig } from './config';
 import healthHandler from './routes/health';
 import { oauthProtectedResourceHandler, oauthAuthorizationServerHandler } from './routes/wellKnown';
@@ -47,8 +48,25 @@ app.use(
   cors({
     origin: corsOrigins.length ? corsOrigins : true,
     credentials: false,
-    exposedHeaders: ['Mcp-Session-Id', 'WWW-Authenticate', 'X-Request-Id'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Mcp-Session-Id', 'MCP-Protocol-Version', 'X-Request-Id'],
+    // Mcp-Session-Id is deliberately absent here while still being accepted in
+    // allowedHeaders (legacy clients may send one; we ignore it). Confirmed in
+    // the SDK rather than assumed: every emission site is guarded by
+    // `this.sessionId !== undefined`, and `sessionId` is only ever assigned
+    // from `this.sessionIdGenerator?.()`. Neither leg passes a
+    // sessionIdGenerator — the legacy leg constructs
+    // NodeStreamableHTTPServerTransport with only `enableJsonResponse`, and the
+    // 2026-07-28 revision removed protocol-level sessions outright — so the
+    // header is never emitted and there is nothing for a browser to read.
+    exposedHeaders: ['WWW-Authenticate', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Mcp-Session-Id',
+      'MCP-Protocol-Version',
+      'Mcp-Method',
+      'Mcp-Name',
+      'X-Request-Id',
+    ],
   })
 );
 
@@ -95,9 +113,53 @@ app.get('/health', healthHandler);
 
 // ---- Startup: init MCP transport then start listening ----
 
+/**
+ * Origin hostnames to allow when ALLOWED_ORIGIN_HOSTS is unset: the host of
+ * APP_BASE_URL, which is the one origin a same-origin browser client would be
+ * served from. Returns [] when APP_BASE_URL is unset or unparseable, in which
+ * case Origin validation cannot be derived and is skipped (with a warning).
+ */
+function defaultOriginHosts(appBaseUrl: string | undefined): string[] {
+  if (!appBaseUrl) return [];
+  try {
+    return [new URL(appBaseUrl).hostname];
+  } catch {
+    return [];
+  }
+}
+
 async function startServer() {
   try {
     const mcpRouter = await initializeMcpTransport();
+
+    // ---- Origin validation on /mcp (MCP's DNS-rebinding-protection MUST) ----
+    // Defaults to APP_BASE_URL's own host rather than being skipped when
+    // ALLOWED_ORIGIN_HOSTS is unset: leaving it off by default meant every
+    // deployment shipped with none of this protection, so the conformance item
+    // was not actually delivered. Non-browser MCP clients (Claude Desktop,
+    // CLIs) send no Origin header at all and always pass, so the default only
+    // affects browser-based clients — and a browser page on an unrelated
+    // origin hitting this endpoint is precisely the attack being blocked.
+    // Cross-origin browser clients must be named explicitly in
+    // ALLOWED_ORIGIN_HOSTS.
+    const configuredOriginHosts = (config.ALLOWED_ORIGIN_HOSTS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const allowedOriginHosts =
+      configuredOriginHosts.length > 0 ? configuredOriginHosts : defaultOriginHosts(config.APP_BASE_URL);
+    if (allowedOriginHosts.length > 0) {
+      app.use('/mcp', originValidation(allowedOriginHosts));
+      console.log(
+        `[MCP] Origin validation active for: ${allowedOriginHosts.join(', ')}` +
+          (configuredOriginHosts.length > 0 ? '' : ' (derived from APP_BASE_URL)')
+      );
+    } else {
+      console.warn(
+        '[MCP] Origin validation DISABLED — set ALLOWED_ORIGIN_HOSTS or APP_BASE_URL to enable ' +
+          'DNS-rebinding protection on /mcp.'
+      );
+    }
 
     // Bearer auth applied to all /mcp routes (express normalizes trailing slash)
     app.use('/mcp', bearerAuthMiddleware, reauthRewriteMiddleware, mcpRouter);

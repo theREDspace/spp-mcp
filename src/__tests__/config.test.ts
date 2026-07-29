@@ -46,4 +46,39 @@ describe('config.load', () => {
     setMinimal();
     expect(load()).toBe(load());
   });
+
+  it('defaults MCP_LEGACY to "serve"', () => {
+    setMinimal();
+    const config = load();
+    expect(config.MCP_LEGACY).toBe('serve');
+  });
+
+  it('accepts MCP_LEGACY=reject', () => {
+    setMinimal();
+    process.env.MCP_LEGACY = 'reject';
+    const config = load();
+    expect(config.MCP_LEGACY).toBe('reject');
+  });
+
+  it('rejects an invalid MCP_LEGACY value', () => {
+    setMinimal();
+    process.env.MCP_LEGACY = 'bogus';
+    expect(() => load()).toThrow(/Invalid configuration/);
+  });
+
+  it('leaves ALLOWED_ORIGIN_HOSTS and CIMD_ALLOWED_HOSTS undefined when unset', () => {
+    setMinimal();
+    const config = load();
+    expect(config.ALLOWED_ORIGIN_HOSTS).toBeUndefined();
+    expect(config.CIMD_ALLOWED_HOSTS).toBeUndefined();
+  });
+
+  it('accepts comma-separated ALLOWED_ORIGIN_HOSTS and CIMD_ALLOWED_HOSTS', () => {
+    setMinimal();
+    process.env.ALLOWED_ORIGIN_HOSTS = 'localhost,127.0.0.1';
+    process.env.CIMD_ALLOWED_HOSTS = 'trusted.example.com';
+    const config = load();
+    expect(config.ALLOWED_ORIGIN_HOSTS).toBe('localhost,127.0.0.1');
+    expect(config.CIMD_ALLOWED_HOSTS).toBe('trusted.example.com');
+  });
 });

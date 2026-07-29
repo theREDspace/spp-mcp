@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { createClient } from './clientRegistry';
+import { isValidRedirectUri } from './redirectUri';
 
 /**
  * POST /oauth/register — RFC 7591 Dynamic Client Registration.
@@ -26,11 +27,28 @@ export function oauthRegisterHandler(req: Request, res: Response) {
   }
 
   const body = (req.body || {}) as Record<string, unknown>;
+
+  // Registered redirect_uris are later matched at /oauth/authorize and then
+  // used as the target of a redirect carrying an authorization code, so they
+  // must be real absolute https (or loopback-http) URLs — not bare strings or
+  // `javascript:`/`data:` schemes. Reject the registration outright rather
+  // than silently filtering bad entries, so a client that sent a
+  // typo'd/unsupported redirect_uri finds out now instead of failing opaquely
+  // at /authorize. Same validator the CIMD path uses (routes/redirectUri.ts).
+  const rawRedirectUris = Array.isArray(body.redirect_uris) ? (body.redirect_uris as unknown[]) : [];
+  const invalid = rawRedirectUris.filter((u) => !isValidRedirectUri(u));
+  if (invalid.length > 0) {
+    res.status(400).json({
+      error: 'invalid_redirect_uri',
+      error_description:
+        'redirect_uris must be absolute https URLs (or http on loopback: localhost, 127.0.0.1, [::1]).',
+    });
+    return;
+  }
+
   const { record, client_secret } = createClient({
     client_name: typeof body.client_name === 'string' ? body.client_name : undefined,
-    redirect_uris: Array.isArray(body.redirect_uris)
-      ? (body.redirect_uris as unknown[]).filter((x): x is string => typeof x === 'string')
-      : undefined,
+    redirect_uris: rawRedirectUris.filter(isValidRedirectUri),
     token_endpoint_auth_method:
       typeof body.token_endpoint_auth_method === 'string'
         ? body.token_endpoint_auth_method
