@@ -26,34 +26,62 @@ export async function oauthAuthorizeHandler(req: Request, res: Response): Promis
   const state = params.get('state');
   const proxyClientId = params.get('client_id') || undefined;
 
-  if (proxyClientId) {
-    const cimdClient = await resolveCimdClient(proxyClientId);
-    if (cimdClient) {
-      if (!clientRedirectUri || !cimdClient.redirect_uris.includes(clientRedirectUri)) {
-        res.status(400).send('redirect_uri is not registered in the Client ID Metadata Document.');
-        return;
-      }
-    } else if (!getClient(proxyClientId)) {
+  // client_id is REQUIRED (RFC 6749 §4.1.1), not merely conditionally
+  // checked. Making it optional here meant that omitting it skipped BOTH the
+  // CIMD and DCR validation below, left redirect_uri completely unvalidated,
+  // and produced a pendingAuthRequests entry with no `clientId` — which
+  // means the eventual CodeBinding has no `proxyClientId` either, so the
+  // client-binding check in oauthToken.ts silently no-ops (its guard is
+  // `binding.proxyClientId && ...`, vacuously false when unset). That
+  // combination lets anyone with their own valid (self-registered) DCR
+  // credentials redeem a code that was never bound to them at all.
+  if (!proxyClientId) {
+    res.status(400).send('Missing client_id.');
+    return;
+  }
+
+  const cimdClient = await resolveCimdClient(proxyClientId);
+  if (cimdClient) {
+    if (!clientRedirectUri || !cimdClient.redirect_uris.includes(clientRedirectUri)) {
+      res.status(400).send('redirect_uri is not registered in the Client ID Metadata Document.');
+      return;
+    }
+  } else {
+    const dcrClient = getClient(proxyClientId);
+    if (!dcrClient) {
       res.status(400).send('Unknown client_id. Register via /oauth/register first.');
+      return;
+    }
+    // client_ids are public (sent in the initial request itself), so without
+    // this check anyone could pair a known, legitimate client_id with their
+    // OWN redirect_uri and have the resulting code delivered straight to
+    // them instead of the real client — redemption would still fail (they
+    // lack that client's secret), but the code itself would leak.
+    if (!clientRedirectUri || !dcrClient.redirect_uris.includes(clientRedirectUri)) {
+      res.status(400).send('redirect_uri is not registered for this client_id.');
       return;
     }
   }
 
+  const cc = params.get('code_challenge') || undefined;
+  const ccm = params.get('code_challenge_method') || undefined;
+  // An unsupported method (e.g. 'plain') must be rejected here, not silently
+  // dropped — dropping it lets the flow proceed through a full SPP login and
+  // only fail later at /oauth/token with a misleading "PKCE verification
+  // failed", indistinguishable from a genuine mismatch (RFC 7636 §4.4 wants
+  // invalid_request at the authorization endpoint instead).
+  if (ccm !== undefined && ccm !== 'S256') {
+    res.status(400).send('Unsupported code_challenge_method. Only S256 is supported.');
+    return;
+  }
+
   if (state && clientRedirectUri) {
-    const cc = params.get('code_challenge') || undefined;
-    const ccm = params.get('code_challenge_method');
     const entry: import('./oauthState').PendingAuthEntry = {
       clientRedirectUri,
       createdAt: Date.now(),
       ...(cc !== undefined ? { codeChallenge: cc } : {}),
-      // 'plain' means verifier === challenge, and challenge arrives in a GET
-      // query string — recoverable from browser history, Referer headers, or
-      // proxy/access logs. That makes a leaked code's verifier trivially
-      // available too, defeating the only protection the secret-less CIMD
-      // path relies on. Only S256 is advertised (wellKnown.ts's
-      // code_challenge_methods_supported), so only S256 is accepted here.
       ...(ccm === 'S256' ? { codeChallengeMethod: ccm } : {}),
-      ...(proxyClientId !== undefined ? { clientId: proxyClientId } : {}),
+      clientId: proxyClientId,
     };
     pendingAuthRequests.set(state, entry);
   }
