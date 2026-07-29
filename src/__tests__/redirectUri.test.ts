@@ -40,6 +40,29 @@ describe('isValidRedirectUri', () => {
     expect(isValidRedirectUri('myapp:/')).toBe(false);
   });
 
+  it('accepts a single-character path on a custom scheme', () => {
+    // A length-based check (pathname.length > 1) rejected this while accepting
+    // a 2-character path, conflating a legitimate short path with the bare '/'.
+    expect(isValidRedirectUri('com.example.app:x')).toBe(true);
+    expect(isValidRedirectUri('com.example.app:xy')).toBe(true);
+  });
+
+  // These hand off to an OS-level handler with an attacker-supplied payload
+  // and are documented delivery vectors, not hypotheticals — intent: is the
+  // Chrome-on-Android redirect/XSS technique, ms-msdt: is CVE-2022-30190
+  // (Follina), search-ms:/ms-appinstaller: are active Windows malware vectors.
+  it('rejects OS-level handler hand-off schemes', () => {
+    expect(isValidRedirectUri('intent://x/#Intent;scheme=javascript;end')).toBe(false);
+    expect(isValidRedirectUri('android-app://com.example')).toBe(false);
+    expect(isValidRedirectUri('ms-msdt:/id')).toBe(false);
+    expect(isValidRedirectUri('search-ms:query=x')).toBe(false);
+    expect(isValidRedirectUri('ms-officecmd:{}')).toBe(false);
+    expect(isValidRedirectUri('ms-appinstaller://x')).toBe(false);
+    expect(isValidRedirectUri('shell:startup')).toBe(false);
+    expect(isValidRedirectUri('itms-services://?url=x')).toBe(false);
+    expect(isValidRedirectUri('help:openbook')).toBe(false);
+  });
+
   it('rejects script-executing and local-resource schemes', () => {
     expect(isValidRedirectUri('javascript:alert(1)')).toBe(false);
     expect(isValidRedirectUri('data:text/html,<script>1</script>')).toBe(false);

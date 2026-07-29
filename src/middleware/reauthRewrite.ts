@@ -109,6 +109,12 @@ export function reauthRewriteMiddleware(
   (res as any).end = (chunk?: any, encoding?: any, callback?: any): Response => {
     if (isEventStream || detectEventStream()) {
       restoreOriginals();
+      // Flush anything buffered before the stream was recognized, matching the
+      // write interceptor. Only reachable if a non-SSE write preceded a
+      // setHeader to text/event-stream, but silently dropping already-buffered
+      // bytes would be a data-loss bug rather than a passthrough.
+      for (const buffered of chunks) originalWrite(buffered);
+      chunks.length = 0;
       return originalEnd(chunk, encoding, callback);
     }
 

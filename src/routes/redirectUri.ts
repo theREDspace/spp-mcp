@@ -32,15 +32,26 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
- * Schemes that execute script in a browser context, or address local/browser
- * -internal resources. `new URL()` normalizes the scheme to lowercase, so a
- * lowercase comparison also covers `JavaScript:` / `DATA:` obfuscation, and
- * URL parsing itself rejects control characters inside the scheme.
+ * Schemes we refuse to redirect to. `new URL()` normalizes the scheme to
+ * lowercase, so a lowercase comparison also covers `JavaScript:` / `DATA:`
+ * obfuscation, and URL parsing itself rejects control characters in a scheme.
+ *
+ * This list is defense-in-depth, NOT the primary control. The primary control
+ * is that a redirect_uri must already be registered — in a CIMD document or
+ * via DCR (gate DCR with REGISTRATION_SECRET) — so reaching any of these
+ * requires an attacker to have registered it and then lured a victim through
+ * the flow. Such an attacker already receives the code via a plain
+ * `https://attacker.example/cb`; what these schemes add is the ability to use
+ * our redirect as a gadget to invoke a script context or an OS handler on the
+ * victim's machine. Treat the list as reducing that gadget surface, and do not
+ * assume it is exhaustive.
  */
 const DENIED_SCHEMES = new Set([
+  // Script execution in a browser context.
   'javascript:',
-  'data:',
   'vbscript:',
+  'data:',
+  // Local or browser-internal resources.
   'file:',
   'blob:',
   'about:',
@@ -51,6 +62,21 @@ const DENIED_SCHEMES = new Set([
   'chrome-extension:',
   'moz-extension:',
   'resource:',
+  // OS-level handler hand-off with an attacker-supplied payload. These are
+  // documented delivery vectors, not hypotheticals: `intent:` carries a
+  // `scheme=`/`S.browser_fallback_url` payload that is the entire point of the
+  // Chrome-on-Android redirect/XSS technique; `ms-msdt:` is CVE-2022-30190
+  // (Follina); `search-ms:` and `ms-appinstaller:` are both active
+  // malware-delivery vectors on Windows.
+  'intent:',
+  'android-app:',
+  'ms-msdt:',
+  'search-ms:',
+  'ms-officecmd:',
+  'ms-appinstaller:',
+  'shell:',
+  'itms-services:',
+  'help:',
 ]);
 
 /**
@@ -81,5 +107,8 @@ export function isValidRedirectUri(u: unknown): u is string {
   if (parsed.protocol === 'http:') return isLoopbackHost(parsed.hostname);
 
   // Private-use / custom scheme: require something to actually redirect to.
-  return parsed.hostname.length > 0 || parsed.pathname.length > 1;
+  // Compare against the empty and bare-'/' paths explicitly rather than by
+  // length — a length check treats a legitimate 1-character path
+  // (`com.example.app:x`) the same as the bare `/` it means to reject.
+  return parsed.hostname.length > 0 || (parsed.pathname !== '' && parsed.pathname !== '/');
 }

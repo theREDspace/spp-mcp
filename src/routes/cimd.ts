@@ -133,7 +133,7 @@ function isDisallowedIp(address: string): boolean {
   }
 }
 
-interface ResolvedAddress {
+export interface ResolvedAddress {
   address: string;
   family: 4 | 6;
 }
@@ -191,7 +191,12 @@ async function resolveAndValidateHost(hostname: string): Promise<ResolvedAddress
  * closes the DNS-rebinding TOCTOU gap: the IP address that was checked is
  * exactly the IP address that gets connected to.
  */
-function pinnedDispatcher(addresses: ResolvedAddress[]): Agent {
+// Exported (rather than module-private) so an integration test can drive the
+// real undici fetch + dispatcher pairing against a local server and prove the
+// pinning actually controls the connection target — see
+// cimd.dispatcher.test.ts. cimd.test.ts mocks fetch, so without that test
+// nothing would catch this mechanism silently ceasing to work.
+export function pinnedDispatcher(addresses: ResolvedAddress[]): Agent {
   return new Agent({
     connect: {
       lookup: (_hostname, _options, callback) => {

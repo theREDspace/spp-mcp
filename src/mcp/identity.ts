@@ -24,13 +24,24 @@ import { dirname, resolve } from 'node:path';
 function readPkgFallback(): { name: string; version: string } {
   let dir = process.cwd();
   for (;;) {
+    let raw: string;
     try {
-      const raw = readFileSync(resolve(dir, 'package.json'), 'utf8');
-      return JSON.parse(raw) as { name: string; version: string };
+      raw = readFileSync(resolve(dir, 'package.json'), 'utf8');
     } catch {
+      // No package.json at this level — keep walking up.
       const parent = dirname(dir);
       if (parent === dir) break; // reached the filesystem root
       dir = parent;
+      continue;
+    }
+    // Found one. Stop here regardless of whether it parses: continuing the
+    // walk past a malformed package.json would silently report some ancestor
+    // directory's package name/version as this server's identity, which is
+    // worse than falling back to the defaults below.
+    try {
+      return JSON.parse(raw) as { name: string; version: string };
+    } catch {
+      break;
     }
   }
   // Callers fall back to the literal defaults below; never throw here, since
