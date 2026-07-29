@@ -24,7 +24,13 @@ const unannotated: Tool[] = [
   { ...genericRead, annotations: { ...readOnly } },
   { ...genericList, annotations: { ...readOnly } },
   { ...genericBatchList, annotations: { ...readOnly } },
-  { ...genericAdd, annotations: { idempotentHint: false, openWorldHint: true } },
+  {
+    ...genericAdd,
+    // destructiveHint is spec'd to default to true when unset (for a
+    // non-read-only tool) — a pure create must set it false explicitly, or a
+    // conformant client treats it the same as generic_delete.
+    annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
   {
     ...genericUpdate,
     annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: true },
@@ -42,7 +48,7 @@ const unannotated: Tool[] = [
   { ...whoami, annotations: { ...readOnly } },
   { ...getUserProfile, annotations: { ...readOnly } },
   // Debug-only — excluded in production
-  ...(isProd ? [] : [{ ...echo, annotations: { openWorldHint: true } }]),
+  ...(isProd ? [] : [{ ...echo, annotations: { ...readOnly } }]),
 ];
 
 export const mcpTools: Tool[] = [...unannotated].sort((a, b) =>

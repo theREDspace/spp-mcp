@@ -61,6 +61,29 @@ export async function oauthTokenHandler(req: Request, res: Response) {
       return;
     }
     const binding = codeBindings.get(code);
+    // CIMD clients have no client_secret (the branch above skips that check
+    // entirely for them), so PKCE is their ONLY proof of possession — it must
+    // be mandatory, not merely verified-if-present. Without this, a CIMD
+    // client_id that simply omits code_challenge at /authorize gets a code
+    // redeemable with no secret, no verifier, and (see below) no client
+    // binding either — any leaked/observed code becomes a live SPP token.
+    if (cimdClient && !binding?.codeChallenge) {
+      res.status(400).json({
+        error: 'invalid_grant',
+        error_description: 'PKCE code_challenge is required for Client ID Metadata Document clients.',
+      });
+      return;
+    }
+    // Bind the code to the client_id that originally requested it, regardless
+    // of whether PKCE was used — this must not be nested inside the PKCE
+    // block, since a code minted for one client must never be redeemable by
+    // different credentials even in a no-PKCE (DCR-with-secret) flow.
+    if (binding?.proxyClientId && binding.proxyClientId !== creds.client_id) {
+      res
+        .status(400)
+        .json({ error: 'invalid_grant', error_description: 'Code was issued to a different client.' });
+      return;
+    }
     if (binding?.codeChallenge) {
       const verifier = body.code_verifier;
       if (!verifier) {
@@ -70,12 +93,6 @@ export async function oauthTokenHandler(req: Request, res: Response) {
       const method = binding.codeChallengeMethod || 'S256';
       if (!verifyPkce(verifier, binding.codeChallenge, method)) {
         res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed.' });
-        return;
-      }
-      if (binding.proxyClientId && binding.proxyClientId !== creds.client_id) {
-        res
-          .status(400)
-          .json({ error: 'invalid_grant', error_description: 'Code was issued to a different client.' });
         return;
       }
     }

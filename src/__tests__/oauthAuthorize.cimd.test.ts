@@ -100,4 +100,34 @@ describe('oauthAuthorizeHandler with CIMD client_id', () => {
     expect(res._status).toBe(400);
     expect(res._sent).toContain('Unknown client_id');
   });
+
+  it('does not store code_challenge_method=plain (only S256 is advertised/accepted)', async () => {
+    // 'plain' means verifier === challenge, and challenge arrives in a GET
+    // query string — recoverable from browser history/Referer/proxy logs.
+    // Storing it would let a leaked code's verifier be trivially recovered
+    // too, defeating the only protection the secret-less CIMD path relies on.
+    const { resolveCimdClient } = require('../routes/cimd');
+    (resolveCimdClient as jest.Mock).mockResolvedValue({
+      client_id: 'https://app.example.com/client.json',
+      client_name: 'Example',
+      redirect_uris: ['http://127.0.0.1:3000/callback'],
+    });
+    const { oauthAuthorizeHandler } = require('../routes/oauthAuthorize');
+    const { pendingAuthRequests } = require('../routes/oauthState');
+
+    const req = makeReq({
+      client_id: 'https://app.example.com/client.json',
+      redirect_uri: 'http://127.0.0.1:3000/callback',
+      state: 'plain-method-state',
+      response_type: 'code',
+      code_challenge: 'some-plain-text-value',
+      code_challenge_method: 'plain',
+    });
+    const res = makeRes();
+
+    await oauthAuthorizeHandler(req, res);
+    const entry = pendingAuthRequests.get('plain-method-state');
+    expect(entry?.codeChallenge).toBe('some-plain-text-value'); // the challenge itself is still stored
+    expect(entry?.codeChallengeMethod).toBeUndefined(); // but not the weak method
+  });
 });

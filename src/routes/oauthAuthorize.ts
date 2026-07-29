@@ -46,7 +46,13 @@ export async function oauthAuthorizeHandler(req: Request, res: Response): Promis
       clientRedirectUri,
       createdAt: Date.now(),
       ...(cc !== undefined ? { codeChallenge: cc } : {}),
-      ...(ccm === 'S256' || ccm === 'plain' ? { codeChallengeMethod: ccm } : {}),
+      // 'plain' means verifier === challenge, and challenge arrives in a GET
+      // query string — recoverable from browser history, Referer headers, or
+      // proxy/access logs. That makes a leaked code's verifier trivially
+      // available too, defeating the only protection the secret-less CIMD
+      // path relies on. Only S256 is advertised (wellKnown.ts's
+      // code_challenge_methods_supported), so only S256 is accepted here.
+      ...(ccm === 'S256' ? { codeChallengeMethod: ccm } : {}),
       ...(proxyClientId !== undefined ? { clientId: proxyClientId } : {}),
     };
     pendingAuthRequests.set(state, entry);

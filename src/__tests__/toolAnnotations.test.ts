@@ -29,9 +29,20 @@ describe('mcpTools annotations and ordering', () => {
     }
   });
 
-  it('marks generic_add as non-idempotent', () => {
+  it('marks generic_add as non-idempotent and explicitly non-destructive', () => {
+    // destructiveHint defaults to true (for a non-read-only tool) when unset,
+    // per the MCP tool-annotations spec — a pure create must set it false
+    // explicitly, or a conformant client treats it the same as generic_delete.
     const tool = mcpTools.find((t) => t.name === 'generic_add');
     expect(tool?.annotations?.idempotentHint).toBe(false);
+    expect(tool?.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('marks echo as read-only (a debug no-op, not destructive by spec default)', () => {
+    const tool = mcpTools.find((t) => t.name === 'echo');
+    // Only present outside production (NODE_ENV=production excludes it).
+    if (process.env.NODE_ENV === 'production') return;
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
   });
 
   it('marks generic_update and generic_delete as destructive and idempotent', () => {
