@@ -1,7 +1,6 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
-  "compilerOptions": { 
-    "ignoreDeprecations": "6.0",
+  "compilerOptions": {
     // File Layout
     "rootDir": "src",
     "outDir": "dist",
@@ -39,7 +38,6 @@
     "jsx": "react-jsx",
     "verbatimModuleSyntax": false,
     "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
 
