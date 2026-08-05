@@ -1,3 +1,14 @@
+/**
+ * generic_delete — delete one record ({id}) or a batch ({ids}) in a single SPP
+ * request.
+ *
+ * SPP's Delete command only accepts the canonical id, so the single form resolves
+ * an alternate id by reading the record first and pulling the canonical value off
+ * it. That extra round trip is why the bulk form requires canonical ids outright.
+ *
+ * A single delete reports ok:true only when SPP confirmed it — the client throws a
+ * classified error otherwise, rather than reporting a delete that never happened.
+ */
 import type { Tool } from './types';
 import { getSchema } from '../../services/registry';
 import SPPClient from '../../clients/SPPClient';

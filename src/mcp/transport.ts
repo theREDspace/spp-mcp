@@ -1,3 +1,20 @@
+/**
+ * The /mcp transport — serves two MCP protocol revisions on one endpoint.
+ *
+ * `2026-07-28` (stateless, per-request `_meta` envelope) and the legacy
+ * `initialize`-handshake era are routed per request by the SDK's
+ * `isLegacyRequest()` classifier. `MCP_LEGACY=reject` turns the legacy leg off;
+ * every legacy-served request is logged so that flip can be timed by evidence
+ * rather than guesswork about what clients are in the field.
+ *
+ * Both legs go through the single `buildServer()` factory below. That is the whole
+ * point of this module's shape: a tool, resource, capability, or cache hint
+ * registered on one leg but not the other yields a server that behaves differently
+ * depending on which client connected, which is close to impossible to reproduce
+ * from a bug report. Add registrations to buildServer(), never to a leg.
+ *
+ * See docs/architecture.md for the retirement procedure.
+ */
 import { Router, Request as ExpressRequest, Response } from 'express';
 import { NodeStreamableHTTPServerTransport, toNodeHandler, toWebRequest } from '@modelcontextprotocol/node';
 import { McpServer, createMcpHandler, isLegacyRequest } from '@modelcontextprotocol/server';

@@ -1,3 +1,20 @@
+/**
+ * generic_add — create one record ({payload}) or a batch ({payloads}) in a single
+ * SPP request.
+ *
+ * The two input shapes are mutually exclusive and one is required; both are
+ * validated up front. Every record is normalized and validated *before* any XML
+ * leaves the process, so a malformed record aborts the whole batch rather than
+ * partially applying it — SPP has no transaction to roll back.
+ *
+ * A bulk response is not pass/fail: SPP returns a per-block status, so `ok` is
+ * true only when every record succeeded and `results` carries the individual
+ * outcomes. Callers must check `results` rather than trusting `ok` alone.
+ *
+ * Note the `destructiveHint: false` annotation applied in tools/index.ts — the MCP
+ * spec defaults that hint to true for any non-read-only tool, so a pure create has
+ * to set it explicitly or conformant clients treat it like generic_delete.
+ */
 import type { Tool } from './types';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';

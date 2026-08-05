@@ -1,3 +1,25 @@
+/**
+ * Turns a tool-level auth failure into a transport-level 401 so clients
+ * re-authenticate on their own.
+ *
+ * The problem: when an SPP token expires, tools return an AUTH_ERROR *result*.
+ * At the HTTP layer that is a perfectly successful 200, so a client has no reason
+ * to refresh anything and the user just sees an error where their data should be.
+ *
+ * The fix: buffer the /mcp response, look for an AUTH_ERROR payload (in a single
+ * response or any element of a batch), and if present replace the whole thing with
+ * a 401 carrying a spec-compliant WWW-Authenticate challenge. Clients that
+ * understand the challenge re-authenticate silently.
+ *
+ * This means overriding `writeHead`, `write`, and `end`, which makes the middleware
+ * sensitive to how downstream code produces responses. Two constraints follow:
+ *
+ * - SSE responses must never be buffered — an open stream would hang forever — and
+ *   stream detection has to check both `writeHead` headers and `setHeader`, since
+ *   Node permits either shape.
+ * - Both transport eras must behave identically here. `reauthRewrite.eras.test.ts`
+ *   pins that parity; run it after touching anything in this file.
+ */
 import { Request, Response, NextFunction } from 'express';
 import { buildBearerChallenge } from '../utils/authChallenge';
 import { AUTH_ERROR_TYPE } from '../mcp/helpers/toolResult';

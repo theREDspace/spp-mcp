@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-An HTTP MCP server for SuiteProjects Pro. Wraps OAuth2, proxies SPP API calls, and exposes tools for projects, users, bookings, time entries, and timesheets.
+An HTTP MCP server for SuiteProjects Pro. Acts as an OAuth 2.1 proxy in front of SPP's OAuth app and exposes SPP's business-object model as generic CRUD tools (`generic_read`, `generic_list`, `generic_add`, …) plus schema-discovery tools and `bo://` resources. There are no per-domain tools — a "project" or "timesheet" query is a `generic_*` call with `objectType` set.
 
 - **Port:** 3030
 - **MCP Endpoint:** `/mcp`
 - **Language:** TypeScript (Node 20+)
 - **Key Library:** `@modelcontextprotocol/express`, `axios`, `fast-xml-parser`
+
+**Read [`docs/architecture.md`](docs/architecture.md) before making non-trivial changes.** It covers the request lifecycle, the dual-era transport, the OAuth proxy flow, the registry merge, where state lives, and the gotchas that have already caused bugs here.
 
 ## Development
 
@@ -67,6 +69,8 @@ The proxy enforces these on every authorization-code flow:
 | OAuth loops | `SPP_CALLBACK_URL` matches in SPP app config and `.env` |
 | Empty/broken XML | `SPP_NAMESPACE` and `SPP_KEY` set correctly |
 | Registration errors | `REGISTRATION_SECRET` set for public `/oauth/register` |
+
+See [`README.md`](README.md#troubleshooting) for the fuller table and [`README.md`](README.md#deployment) for deployment.
 
 ---
 

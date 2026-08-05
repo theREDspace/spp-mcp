@@ -1,3 +1,17 @@
+/**
+ * generic_update — update one record ({id, changes}) or a batch ({updates}) in a
+ * single SPP request.
+ *
+ * Same validate-everything-before-sending discipline as generic_add, and the same
+ * per-record result semantics: `ok` is true only if every record succeeded, and
+ * `results` carries the individual outcomes.
+ *
+ * The single form accepts a canonical *or* alternate id; the bulk form requires
+ * canonical ids. SPP echoes no correlation id, so BOService matches result blocks
+ * to inputs positionally and cross-checks the canonical id each success block does
+ * echo (see BOService.toWriteResult). An alternate id has nothing to cross-check
+ * against, which would leave positional drift undetectable.
+ */
 import type { Tool } from './types';
 import SPPClient from '../../clients/SPPClient';
 import { normalizeAndValidateBOInput } from '../../utils/normalizeAndValidateBOInput';

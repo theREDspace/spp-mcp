@@ -1,3 +1,14 @@
+/**
+ * generic_batch_list — run several filters against one business object in a single
+ * SPP request.
+ *
+ * Prefer this over looping generic_list when an agent needs the same object under
+ * several different filters; it is one round trip instead of N.
+ *
+ * For user-bound BOs, an empty filter array is expanded to a single empty filter so
+ * the user-context injection still has something to attach to — otherwise a
+ * "list all my timesheets" call with no filter would silently query every user's.
+ */
 import type { Tool } from './types';
 import SPPClient from '../../clients/SPPClient';
 import { resolveUserContext, USER_BOUND_OBJECTS } from '../helpers/agentUserContext';

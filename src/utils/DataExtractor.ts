@@ -1,4 +1,16 @@
-// src/clients/SPPClient.ts
+/**
+ * Unwraps SPP's XML API responses into plain data.
+ *
+ * SPP wraps every response in an `Auth` envelope followed by one block per command,
+ * and each block carries its own status code. Two consequences shape this module:
+ *
+ * - An auth failure is reported *inside* a 200 response body, not as an HTTP
+ *   status, so it has to be detected here and raised as SPPAuthError. That error is
+ *   what eventually becomes a 401 via reauthRewriteMiddleware.
+ * - A multi-record write can partially succeed. `WriteBlockResult` preserves the
+ *   per-block status so callers can report which records failed instead of
+ *   collapsing the batch to a single pass/fail.
+ */
 import {
 SPPErrorDetail,
   SPPAuthError,

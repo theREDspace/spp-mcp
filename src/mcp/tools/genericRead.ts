@@ -1,3 +1,13 @@
+/**
+ * generic_read — read one record from any business object by canonical or
+ * alternate id.
+ *
+ * A miss returns ok:true with data:null rather than an error. SPP cannot
+ * distinguish "no such record" from "not visible to this user", so treating a miss
+ * as a failure would report an access problem as a lookup problem. The `message`
+ * says as much, so an agent can relay the ambiguity instead of asserting the
+ * record does not exist.
+ */
 import type { Tool } from './types';
 import SPPClient from '../../clients/SPPClient';
 import { normalizeIdForBO } from '../../utils/normalizeAndValidateBOInput';
