@@ -30,6 +30,33 @@ describe('config.load', () => {
     expect(cfg.OAUTH_RATE_LIMIT_PER_MIN).toBe(30);
   });
 
+  describe('MUTEX_ID_ENABLED', () => {
+    // Regression: this used to be read as `process.env.MUTEX_ID_ENABLED &&`,
+    // a truthy string check, so 'FALSE' enabled the feature. Note that
+    // z.coerce.boolean() would reproduce that exact bug, so these cases pin the
+    // parsing rather than merely asserting the happy path.
+    it.each(['FALSE', 'false', 'no', '0', 'off', 'anything'])(
+      'treats %p as disabled',
+      (value) => {
+        setMinimal();
+        process.env.MUTEX_ID_ENABLED = value;
+        expect(load().MUTEX_ID_ENABLED).toBe(false);
+      }
+    );
+
+    it.each(['TRUE', 'true', 'True', '  TRUE  '])('treats %p as enabled', (value) => {
+      setMinimal();
+      process.env.MUTEX_ID_ENABLED = value;
+      expect(load().MUTEX_ID_ENABLED).toBe(true);
+    });
+
+    it('defaults to disabled when unset', () => {
+      setMinimal();
+      delete process.env.MUTEX_ID_ENABLED;
+      expect(load().MUTEX_ID_ENABLED).toBe(false);
+    });
+  });
+
   it('throws with a readable message when required keys are missing', () => {
     delete process.env.SPP_URL;
     delete process.env.SPP_CLIENT_ID;

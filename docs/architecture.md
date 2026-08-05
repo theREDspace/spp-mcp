@@ -251,15 +251,15 @@ Two caveats the header comment does not mention:
   `clientRegistry.ts`, `authChallenge.ts`, and others still read `process.env`
   directly. Migrating them is a worthwhile cleanup, but until then, adding a
   variable to `config.ts` alone does not guarantee it is what a given module reads.
-- **`MUTEX_ID_ENABLED` is not in the schema at all**, and it does not behave like a
-  boolean. [`timesheetResolver.ts`](../src/mcp/helpers/timesheetResolver.ts) reads
-  it directly and tests it for truthiness, so the string `"FALSE"` — being
-  non-empty — *enables* the feature exactly like `"TRUE"`. Only unset or empty
-  disables it. `.env.sample` shipped `MUTEX_ID_ENABLED=FALSE` under a comment
-  recommending `TRUE`, which meant the file said one thing, recommended another,
-  and did a third. This is a live bug: either parse the value
-  (`=== 'TRUE'`) or move it into `config.ts` as `z.coerce.boolean()`. Unfixed as of
-  2026-08-05 because it was found during a documentation pass.
+- **`MUTEX_ID_ENABLED` is parsed explicitly, and must stay that way.** It reaches
+  the schema as a string and is compared against `'TRUE'`. It was previously read
+  straight off `process.env` and tested for truthiness, so `MUTEX_ID_ENABLED=FALSE`
+  *enabled* the feature — a non-empty string is truthy — and only unset or empty
+  disabled it. `.env.sample` shipped `FALSE` under a comment recommending `TRUE`,
+  so the file said one thing, recommended another, and did a third. Note that
+  `z.coerce.boolean()` would reintroduce the bug verbatim, since
+  `Boolean('FALSE') === true`; `config.test.ts` pins the parsing against exactly
+  that regression.
 
 `CLIENT_REGISTRY_PATH` resolves **relative to the process working directory**, as
 does the `package.json` fallback in `identity.ts`. The process must therefore start
@@ -268,7 +268,7 @@ from that directory; be aware of it if you ever change how the process is launch
 
 ## Testing
 
-24 test files, 414 tests, under Jest with ts-jest: `npm test`.
+24 test files, 218 tests, under Jest with ts-jest: `npm test`.
 
 The suite concentrates on the security-critical and easy-to-regress areas rather
 than aiming at uniform coverage — PKCE, redirect_uri validation, CIMD and its SSRF
@@ -282,18 +282,12 @@ inheriting this should treat adding a workflow that runs `npm test` and
 `npm run build` on pull requests as the first infrastructure task; the suite is
 good enough to be worth enforcing, and nothing is enforcing it.
 
-**Known issue: `npm test` currently runs the suite twice.** `jest.config.cjs` sets
-no `testPathIgnorePatterns`, so its `testRegex` also matches the git worktree copy
-under `.claude/worktrees/`. Jest reports 48 suites where there are 24, and it is
-executing tests from an abandoned branch alongside the real ones — so a stale
-worktree could fail the run, or mask a real failure. The fix is one line:
-
-```js
-testPathIgnorePatterns: ['/node_modules/', '/dist/', '/\\.claude/'],
-```
-
-This is unfixed as of 2026-08-05 because it was found during a documentation pass
-and is a code change, not a doc change.
+`jest.config.cjs` sets `testPathIgnorePatterns` for `node_modules`, `dist`, and
+`.claude`. That last one is not incidental: without it, `testRegex` also matches git
+worktree copies under `.claude/worktrees/`, so the suite runs twice and tests from
+whatever branch that worktree holds execute alongside the real ones — able to fail
+the run, or to mask a real failure. If you add another worktree location, add it
+there too.
 
 ## Gotchas
 

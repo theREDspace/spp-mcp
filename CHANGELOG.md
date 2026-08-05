@@ -98,3 +98,17 @@ remains backward compatible. Each item below is a new hard `400`.
   security headers, and a narrowable CORS origin list.
 - `uncaughtException` and `unhandledRejection` now exit the process so a
   supervisor (pm2, systemd) restarts it cleanly rather than leaving it wedged.
+
+### Fixed
+
+- **`MUTEX_ID_ENABLED=FALSE` used to enable the feature.** It was read directly
+  from `process.env` and tested for truthiness, and `'FALSE'` is a non-empty
+  string; only unset or empty actually disabled it. It now lives in `src/config.ts`
+  and is compared against `'TRUE'` explicitly. **This changes behavior on deploy:**
+  if your `.env` says `FALSE` and you relied on the mutex ID being sent, change it
+  to `TRUE`. `z.coerce.boolean()` would have reproduced the bug exactly
+  (`Boolean('FALSE') === true`), so `config.test.ts` pins the parsing.
+- **`npm test` ran the whole suite twice.** `jest.config.cjs` had no
+  `testPathIgnorePatterns`, so `testRegex` also matched git worktree copies under
+  `.claude/worktrees/` — 48 reported suites for 24 real files, executing tests from
+  an abandoned branch alongside the real ones.

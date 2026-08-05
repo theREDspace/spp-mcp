@@ -123,22 +123,13 @@ Every variable is validated by a Zod schema in [`src/config.ts`](./src/config.ts
 | `OAUTH_RATE_LIMIT_PER_MIN` | `30` | Requests per minute per IP on `/oauth/*` and `/callback/spp`. |
 | `CLIENT_REGISTRY_PATH` | `data/clients.json` | DCR client registry path. **Resolved relative to the process working directory.** |
 
-> ### ⚠️ `MUTEX_ID_ENABLED` does not behave like a boolean
->
-> It is not in `src/config.ts`. It is read directly from `process.env` in
-> [`timesheetResolver.ts`](./src/mcp/helpers/timesheetResolver.ts) as a **truthy
-> string check**:
->
-> ```ts
-> ...(process.env.MUTEX_ID_ENABLED && { mutex_id: cacheKey.toLowerCase() }),
-> ```
->
-> `"FALSE"` is a non-empty string, so **`MUTEX_ID_ENABLED=FALSE` enables the
-> feature**, identically to `TRUE`. The only ways to disable it are to leave the
-> variable unset or set it to an empty string.
->
-> Set it to `TRUE` so the value matches the behavior, or fix the check to parse the
-> value properly. Do not set it to `FALSE` expecting that to turn it off.
+| `MUTEX_ID_ENABLED` | `false` | Adds a `mutex_id` to Timesheet creation for idempotency. Only the literal `TRUE` (any case, trimmed) enables it. |
+
+> **Behavior change in the commit that fixed this.** `MUTEX_ID_ENABLED` used to be
+> read straight off `process.env` and tested for truthiness, so `FALSE` — a
+> non-empty string — *enabled* the feature just like `TRUE`. It is now parsed
+> properly. **If your `.env` says `FALSE` and you relied on the old behavior, change
+> it to `TRUE`**, or the mutex ID will stop being sent after you deploy.
 
 ---
 
@@ -315,7 +306,7 @@ will now fail: missing `client_id`, missing `state`, missing `code_challenge`, a
 
 ```bash
 npm run dev            # nodemon + ts-node, watches src/
-npm test               # Jest, 24 test files / 414 tests
+npm test               # Jest, 24 test files / 218 tests
 npm run build          # tsc --noEmit, regenerate registry, bundle to dist/
 npm start              # run dist/index.js
 npm run gen:registry   # regenerate the derived BO registry (also runs on prebuild)

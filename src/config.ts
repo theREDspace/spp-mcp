@@ -46,6 +46,18 @@ const schema = z.object({
 
   // Client ID Metadata Document trust policy (comma-separated hostnames; unset = any https host)
   CIMD_ALLOWED_HOSTS: z.string().optional(),
+
+  // Adds a mutex_id to Timesheet creation for idempotency.
+  //
+  // Parsed explicitly rather than coerced. This was previously read straight off
+  // process.env and tested for truthiness, so the string 'FALSE' — being
+  // non-empty — enabled the feature exactly like 'TRUE', and only unset or empty
+  // disabled it. z.coerce.boolean() would reproduce that bug verbatim
+  // (Boolean('FALSE') === true), so the comparison is spelled out.
+  MUTEX_ID_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim().toUpperCase() === 'TRUE'),
 });
 
 export type AppConfig = z.infer<typeof schema>;
