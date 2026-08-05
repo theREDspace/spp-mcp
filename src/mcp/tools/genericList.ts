@@ -1,3 +1,16 @@
+/**
+ * generic_list — list/search records for any business object.
+ *
+ * Two behaviors here are worth knowing before editing:
+ *
+ * 1. For user-bound BOs (see USER_BOUND_OBJECTS) the caller's user id is injected
+ *    into the filter automatically, so "my timesheets" resolves without the agent
+ *    having to know which field carries the binding.
+ * 2. A validation failure does not just report the bad field — it diffs the filter
+ *    against the merged registry and looks for a semantic pattern that mentions the
+ *    offending field, so the error can carry a corrected example. Agents recover
+ *    from a wrong-field error far more reliably when handed the right shape.
+ */
 import type { Tool } from './types';
 import { mergedRegistry } from '../../services/registry';
 import SPPClient from '../../clients/SPPClient';

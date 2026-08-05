@@ -1,6 +1,7 @@
 // Shared timesheet resolution logic for time entry operations
 import type SPPClient from '../../clients/SPPClient';
 import { dateContainerToDate, formatISODate } from './dates';
+import { load as loadConfig } from '../../config';
 
 type TimesheetResult =
   | { ok: true; timesheet: any }
@@ -148,7 +149,7 @@ try {
     endDate.setDate(startDate.getDate() + 6);
 
     const created = await client.add("Timesheet", {
-      ...(process.env.MUTEX_ID_ENABLED && { mutex_id: cacheKey.toLowerCase() }),
+      ...(loadConfig().MUTEX_ID_ENABLED && { mutex_id: cacheKey.toLowerCase() }),
       userid: userId,
       status: "O",
       starts: startDate.toISOString(),
